@@ -1,0 +1,1107 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  LayoutDashboard, 
+  Users, 
+  Briefcase, 
+  KanbanSquare, 
+  Plus, 
+  ChevronRight, 
+  ChevronLeft, 
+  Menu, 
+  X,
+  Building2,
+  Phone,
+  MessageCircle,
+  Calendar,
+  AlignLeft,
+  Paperclip,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  ListPlus,
+  Trash2,
+  MoreVertical,
+  Search,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Maximize2
+} from 'lucide-react';
+
+export default function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('kanban');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Global State
+  const [clients, setClients] = useState([
+    { id: 'c1', name: 'João Silva', company: 'TechCorp', contact: '11999999999', plan: 'Plano Pro', isFreeTrial: false, trialDuration: '' },
+    { id: 'c2', name: 'Maria Souza', company: 'Design Co.', contact: 'maria@designco.com', plan: 'Plano Básico', isFreeTrial: true, trialDuration: '14 dias' }
+  ]);
+
+  const [projects, setProjects] = useState([
+    { id: 'p1', title: 'Redesign do Site', clientId: 'c1' },
+    { id: 'p2', title: 'Campanha de Marketing', clientId: 'c2' }
+  ]);
+
+  const [timelineItems, setTimelineItems] = useState([
+    { id: 'tl1', projectId: 'p1', title: 'Fase de Design', startDate: '2026-11-01', endDate: '2026-11-15', completed: false },
+    { id: 'tl2', projectId: 'p1', title: 'Desenvolvimento', startDate: '2026-11-16', endDate: '2026-12-10', completed: false }
+  ]);
+
+  const [kanbanLists, setKanbanLists] = useState([
+    { id: 'todo', title: 'A Fazer' },
+    { id: 'in-progress', title: 'Em Andamento' },
+    { id: 'done', title: 'Concluído' },
+    { id: 'client-c1', title: 'João Silva' },
+    { id: 'client-c2', title: 'Maria Souza' }
+  ]);
+
+  const [tasks, setTasks] = useState([
+    { id: 't1', title: 'Criar wireframes da página inicial', projectId: 'p1', listId: 'todo', description: 'Focar na usabilidade mobile primeiramente.', attachments: [] },
+    { id: 't2', title: 'Aprovar orçamento com cliente', projectId: 'p2', listId: 'in-progress', description: '', attachments: [] },
+    { id: 't3', title: 'Reunião de Kickoff', projectId: 'p1', listId: 'done', description: '', attachments: [] }
+  ]);
+
+  // Modal States
+  const [timelineModalProject, setTimelineModalProject] = useState(null);
+  const [taskDetailsModal, setTaskDetailsModal] = useState(null);
+
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    // Restrição estrita de login para o usuário e senha exatos solicitados
+    if (
+      loginEmail.trim().toLowerCase() === 'cristhiandeoliveirasantos@gmail.com' && 
+      loginPassword === 'Cristhian20053192@'
+    ) {
+      setIsAuthenticated(true);
+      setLoginError('');
+    } else {
+      setLoginError('Acesso negado. Credenciais inválidas.');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setLoginEmail('');
+    setLoginPassword('');
+  };
+
+  // ID Generator
+  const generateId = (prefix) => `${prefix}${Math.random().toString(36).substr(2, 9)}`;
+
+  // Helpers
+  const getClientName = (clientId) => clients.find(c => c.id === clientId)?.company || 'Desconhecido';
+  const getProjectName = (projectId) => projects.find(p => p.id === projectId)?.title || 'Desconhecido';
+  
+  const formatWhatsApp = (contact) => {
+    const digits = contact.replace(/\D/g, '');
+    return digits.length >= 10 ? `https://wa.me/55${digits}` : null;
+  };
+
+  // --- COMPONENTE: SIDEBAR ---
+  const Sidebar = () => {
+    const navItems = [
+      { id: 'clientes', label: 'Clientes', icon: Users },
+      { id: 'projetos', label: 'Projetos', icon: Briefcase },
+      { id: 'kanban', label: 'Quadro Kanban', icon: KanbanSquare },
+    ];
+
+    return (
+      <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#08194c] text-white transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 flex flex-col shadow-xl flex-shrink-0`}>
+        <div className="flex items-center justify-between p-6 border-b border-blue-950/50">
+          <div className="flex items-center space-x-3">
+            <LayoutDashboard className="w-8 h-8 text-blue-300" />
+            <span className="text-xl font-bold tracking-wider">Oliveira Vitis</span>
+          </div>
+          <button className="md:hidden text-white" onClick={() => setIsMobileMenuOpen(false)}>
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+        <nav className="flex-1 px-4 py-6 space-y-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive ? 'bg-white text-[#08194c] shadow-md font-semibold' : 'text-blue-100 hover:bg-white/10 hover:text-white'}`}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? 'text-[#08194c]' : 'text-blue-300'}`} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+        
+        {/* Botão de Logout */}
+        <div className="p-4 border-t border-blue-950/50">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white transition-colors text-sm font-medium"
+          >
+            <span>Encerrar Sessão</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // --- COMPONENTE: CLIENTES ---
+  const ClientesView = () => {
+    const [newClient, setNewClient] = useState({ name: '', company: '', contact: '', plan: 'Plano Básico', isFreeTrial: false, trialDuration: '' });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterPlan, setFilterPlan] = useState('');
+    const [filterTrial, setFilterTrial] = useState('');
+    const [activeDropdown, setActiveDropdown] = useState(null);
+
+    const handleAddClient = (e) => {
+      e.preventDefault();
+      if (!newClient.name || !newClient.company) return;
+      const newClientId = generateId('c');
+      setClients([...clients, { ...newClient, id: newClientId }]);
+      
+      const newListId = generateId('l');
+      setKanbanLists([...kanbanLists, { id: newListId, title: newClient.name }]);
+
+      setNewClient({ name: '', company: '', contact: '', plan: 'Plano Básico', isFreeTrial: false, trialDuration: '' });
+    };
+
+    const handleDeleteClient = (e, id) => {
+      e.stopPropagation();
+      setClients(clients.filter(c => c.id !== id));
+      setActiveDropdown(null);
+    };
+
+    const handleClientClick = (client) => {
+      setActiveTab('kanban');
+      setTimeout(() => {
+        const listElements = document.querySelectorAll('[data-list-title]');
+        let targetList = null;
+        listElements.forEach(el => {
+          if (el.getAttribute('data-list-title') === client.name) targetList = el;
+        });
+        if (targetList) {
+          targetList.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          targetList.classList.add('ring-4', 'ring-blue-400', 'transition-all', 'duration-500');
+          setTimeout(() => targetList.classList.remove('ring-4', 'ring-blue-400'), 2000);
+        }
+      }, 100);
+    };
+
+    const filteredClients = clients.filter(c => {
+      const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.company.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchPlan = filterPlan ? c.plan === filterPlan : true;
+      const matchTrial = filterTrial ? (filterTrial === 'sim' ? c.isFreeTrial : !c.isFreeTrial) : true;
+      return matchSearch && matchPlan && matchTrial;
+    });
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-300 w-full">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <h2 className="text-2xl font-bold text-[#08194c] mb-6 flex items-center">
+            <Users className="w-6 h-6 mr-3 text-blue-500" /> Novo Cliente
+          </h2>
+          <form onSubmit={handleAddClient} className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <input type="text" placeholder="Nome do Responsável" required className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newClient.name} onChange={(e) => setNewClient({ ...newClient, name: e.target.value })} />
+              <input type="text" placeholder="Empresa" required className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newClient.company} onChange={(e) => setNewClient({ ...newClient, company: e.target.value })} />
+              <input type="text" placeholder="WhatsApp ou Email" required className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newClient.contact} onChange={(e) => setNewClient({ ...newClient, contact: e.target.value })} />
+            </div>
+            
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+              <div className="w-full md:w-auto">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Plano Atual</span>
+                <select className="w-full p-2.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#08194c] text-sm bg-white" value={newClient.plan} onChange={(e) => setNewClient({...newClient, plan: e.target.value})}>
+                  <option value="Plano Básico">Plano Básico</option>
+                  <option value="Plano Pro">Plano Pro</option>
+                  <option value="Plano Enterprise">Plano Enterprise</option>
+                  <option value="Personalizado">Personalizado</option>
+                </select>
+              </div>
+              <div className="w-full md:w-auto flex flex-col md:flex-row md:items-center gap-4">
+                <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer mt-1 md:mt-5">
+                  <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-[#08194c] focus:ring-[#08194c]" checked={newClient.isFreeTrial} onChange={(e) => setNewClient({...newClient, isFreeTrial: e.target.checked})} />
+                  <span className="font-medium">Em Free Trial?</span>
+                </label>
+                {newClient.isFreeTrial && (
+                  <div className="w-full md:w-auto">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Duração do Trial</span>
+                    <input type="text" placeholder="Ex: 14 dias..." className="w-full p-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#08194c] text-sm" value={newClient.trialDuration} onChange={(e) => setNewClient({...newClient, trialDuration: e.target.value})} />
+                  </div>
+                )}
+              </div>
+              <div className="ml-auto mt-2 md:mt-0 w-full md:w-auto flex">
+                <button type="submit" className="w-full md:w-auto bg-[#08194c] hover:bg-blue-900 text-white px-6 py-2.5 rounded-xl transition-colors shadow-md flex items-center justify-center font-semibold text-sm">
+                  <Plus className="w-5 h-5 mr-1" /> Adicionar Cliente
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <h3 className="text-xl font-bold text-gray-800">Clientes Cadastrados</h3>
+              <div className="relative">
+                <Search className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" />
+                <input 
+                  type="text" 
+                  placeholder="Pesquisar cliente..." 
+                  className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none w-full md:w-64 text-sm bg-white"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <div className="flex flex-col md:flex-row gap-3">
+              <select 
+                className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#08194c] bg-white w-full md:w-auto"
+                value={filterPlan}
+                onChange={(e) => setFilterPlan(e.target.value)}
+              >
+                <option value="">Todos os Planos</option>
+                <option value="Plano Básico">Plano Básico</option>
+                <option value="Plano Pro">Plano Pro</option>
+                <option value="Plano Enterprise">Plano Enterprise</option>
+                <option value="Personalizado">Personalizado</option>
+              </select>
+              <select 
+                className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#08194c] bg-white w-full md:w-auto"
+                value={filterTrial}
+                onChange={(e) => setFilterTrial(e.target.value)}
+              >
+                <option value="">Todos (Trial)</option>
+                <option value="sim">Em Free Trial</option>
+                <option value="nao">Sem Free Trial</option>
+              </select>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-100 pb-20">
+            {filteredClients.length === 0 ? (
+              <p className="p-8 text-center text-gray-500">Nenhum cliente encontrado.</p>
+            ) : (
+              filteredClients.map(client => {
+                const wppLink = formatWhatsApp(client.contact);
+                return (
+                  <div key={client.id} onClick={() => handleClientClick(client)} className="p-6 flex flex-col md:flex-row md:items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer relative group">
+                    <div className="flex-1 pr-4">
+                      <h4 className="font-bold text-lg text-[#08194c] flex items-center">
+                        <Building2 className="w-4 h-4 mr-2 text-gray-400" /> {client.company}
+                      </h4>
+                      <p className="text-gray-600 mt-1 flex items-center">
+                        <Users className="w-4 h-4 mr-2 text-gray-400" /> {client.name}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-3">
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded bg-blue-50 text-[#08194c] border border-blue-100">
+                          {client.plan || 'Plano Básico'}
+                        </span>
+                        {client.isFreeTrial && (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded bg-orange-50 text-orange-600 border border-orange-200">
+                            Free Trial: {client.trialDuration || 'Não especificado'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-4 md:mt-0 flex items-center space-x-3">
+                      {wppLink ? (
+                        <a href={wppLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-sm bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 px-4 py-2 rounded-full font-medium inline-flex items-center w-max transition-colors">
+                          <MessageCircle className="w-4 h-4 mr-2" /> {client.contact}
+                        </a>
+                      ) : (
+                        <span className="text-sm bg-blue-50 text-blue-800 px-4 py-2 rounded-full font-medium inline-flex items-center w-max">
+                          <Phone className="w-4 h-4 mr-2" /> {client.contact}
+                        </span>
+                      )}
+                      
+                      {/* Menu 3 Pontos */}
+                      <div className="relative">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === client.id ? null : client.id); }} 
+                          className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors"
+                        >
+                          <MoreVertical className="w-5 h-5" />
+                        </button>
+                        {activeDropdown === client.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
+                            <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 z-20 overflow-hidden">
+                              <button 
+                                onClick={(e) => handleDeleteClient(e, client.id)}
+                                className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center transition-colors font-medium"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Deletar
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --- COMPONENTE: PROJETOS ---
+  const ProjetosView = () => {
+    const [newProject, setNewProject] = useState({ title: '', clientId: '' });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [activeDropdown, setActiveDropdown] = useState(null);
+
+    const handleAddProject = (e) => {
+      e.preventDefault();
+      if (!newProject.title || !newProject.clientId) return;
+      setProjects([...projects, { ...newProject, id: generateId('p') }]);
+      setNewProject({ title: '', clientId: '' });
+    };
+
+    const handleDeleteProject = (e, id) => {
+      e.stopPropagation();
+      setProjects(projects.filter(p => p.id !== id));
+      setActiveDropdown(null);
+    };
+
+    const filteredProjects = projects.filter(p => 
+      p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      getClientName(p.clientId).toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300 w-full">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold text-[#08194c] flex items-center">
+              <Briefcase className="w-6 h-6 mr-3 text-blue-500" /> Projetos
+            </h2>
+            <div className="relative">
+              <Search className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" />
+              <input 
+                type="text" 
+                placeholder="Pesquisar projeto..." 
+                className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none w-full md:w-64 text-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-gray-100">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Novo Projeto</h3>
+            <form onSubmit={handleAddProject} className="flex flex-col md:flex-row gap-4">
+              <input type="text" placeholder="Nome do Projeto" required className="flex-1 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newProject.title} onChange={(e) => setNewProject({ ...newProject, title: e.target.value })} />
+              <select required className="flex-1 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none bg-white text-sm md:text-base" value={newProject.clientId} onChange={(e) => setNewProject({ ...newProject, clientId: e.target.value })}>
+                <option value="" disabled>Vincular a um Cliente...</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.company} ({c.name})</option>)}
+              </select>
+              <button type="submit" className="bg-[#08194c] hover:bg-blue-900 text-white px-6 py-3 rounded-xl transition-colors shadow-md font-semibold">Criar Projeto</button>
+            </form>
+          </div>
+        </div>
+
+        {filteredProjects.length === 0 ? (
+           <p className="p-8 text-center text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">Nenhum projeto encontrado.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+            {filteredProjects.map(project => (
+              <div 
+                key={project.id} 
+                onClick={() => setTimelineModalProject(project)}
+                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer relative overflow-hidden group"
+              >
+                <div className="absolute top-0 left-0 w-2 h-full bg-[#08194c] rounded-l-2xl"></div>
+                <div className="flex justify-between items-start">
+                  <div className="ml-4">
+                    <h4 className="font-bold text-xl text-gray-800 mb-2">{project.title}</h4>
+                    <p className="text-gray-500 flex items-center text-sm">
+                      <Building2 className="w-4 h-4 mr-2" />
+                      Cliente: <span className="font-semibold text-[#08194c] ml-1">{getClientName(project.clientId)}</span>
+                    </p>
+                    <div className="mt-4 inline-flex items-center text-sm text-blue-600 font-medium bg-blue-50 px-3 py-1.5 rounded-lg">
+                      <Calendar className="w-4 h-4 mr-2" /> Abrir Timeline / Cronograma
+                    </div>
+                  </div>
+                  
+                  {/* Menu 3 Pontos */}
+                  <div className="relative ml-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === project.id ? null : project.id); }} 
+                      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                    {activeDropdown === project.id && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
+                        <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 z-20 overflow-hidden">
+                          <button 
+                            onClick={(e) => handleDeleteProject(e, project.id)}
+                            className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center transition-colors font-medium"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" /> Deletar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // --- MODAL TIMELINE / GANTT FULLSCREEN ---
+  const TimelineModal = () => {
+    if (!timelineModalProject) return null;
+    const [newItem, setNewItem] = useState({ title: '', startDate: '', endDate: '' });
+
+    const projectItems = timelineItems.filter(item => item.projectId === timelineModalProject.id);
+
+    const handleAddItem = (e) => {
+      e.preventDefault();
+      if (!newItem.title || !newItem.startDate || !newItem.endDate) return;
+      setTimelineItems([...timelineItems, {
+        id: generateId('tl'),
+        projectId: timelineModalProject.id,
+        ...newItem,
+        completed: false
+      }]);
+      setNewItem({ title: '', startDate: '', endDate: '' });
+    };
+
+    const toggleComplete = (id) => {
+      setTimelineItems(timelineItems.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
+    };
+
+    const deleteTimelineItem = (id) => {
+      setTimelineItems(timelineItems.filter(item => item.id !== id));
+    };
+
+    // Calculate days remaining or overdue
+    const getDaysStatus = (endDateStr) => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const end = new Date(endDateStr);
+      end.setHours(0,0,0,0);
+      const diffTime = end - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 0) return { text: `${diffDays} dias restantes`, color: 'text-blue-600 bg-blue-50' };
+      if (diffDays === 0) return { text: 'Vence hoje', color: 'text-orange-600 bg-orange-50' };
+      return { text: `Atrasado ${Math.abs(diffDays)} dias`, color: 'text-red-600 bg-red-50' };
+    };
+
+    // Gera meses para o Gantt (mostra os meses presentes nos itens ou o mês atual)
+    const getMonthsList = () => {
+      const monthsMap = [
+        { name: 'Janeiro', days: 31 },
+        { name: 'Fevereiro', days: 28 },
+        { name: 'Março', days: 31 },
+        { name: 'Abril', days: 30 },
+        { name: 'Maio', days: 31 },
+        { name: 'Junho', days: 30 },
+        { name: 'Julho', days: 31 },
+        { name: 'Agosto', days: 31 },
+        { name: 'Setembro', days: 30 },
+        { name: 'Outubro', days: 31 },
+        { name: 'Novembro', days: 30 },
+        { name: 'Dezembro', days: 31 },
+      ];
+      // Para simplificar a visualização interativa em Gantt, exibiremos uma faixa contínua dos meses principais de 2026
+      return monthsMap;
+    };
+
+    const months = getMonthsList();
+    const todayDate = new Date();
+    const currentMonthIndex = todayDate.getMonth(); // 0-11
+    const currentDayNumber = todayDate.getDate(); // 1-31
+
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex flex-col animate-in fade-in duration-200">
+        {/* Top Header */}
+        <div className="bg-[#08194c] text-white px-6 py-4 flex items-center justify-between shadow-md">
+          <div className="flex items-center space-x-3">
+            <Maximize2 className="w-6 h-6 text-blue-300" />
+            <div>
+              <h2 className="text-xl font-bold">{timelineModalProject.title}</h2>
+              <p className="text-xs text-blue-200">Cliente: {getClientName(timelineModalProject.clientId)} • Cronograma e Timeline (Gantt)</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setTimelineModalProject(null)}
+            className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-gray-100">
+          {/* Painel Esquerdo: Etapas & Checkbox */}
+          <div className="w-full md:w-96 bg-white border-r border-gray-200 p-6 flex flex-col shadow-sm overflow-y-auto">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+              <ListPlus className="w-5 h-5 mr-2 text-blue-600" /> Etapas do Projeto
+            </h3>
+
+            {/* Adicionar nova etapa */}
+            <form onSubmit={handleAddItem} className="space-y-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <input 
+                type="text" 
+                placeholder="Nome da etapa..." 
+                required 
+                className="w-full p-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#08194c] bg-white"
+                value={newItem.title} 
+                onChange={(e) => setNewItem({...newItem, title: e.target.value})} 
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-gray-500">Início</span>
+                  <input 
+                    type="date" 
+                    required 
+                    className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none bg-white"
+                    value={newItem.startDate} 
+                    onChange={(e) => setNewItem({...newItem, startDate: e.target.value})} 
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-gray-500">Término</span>
+                  <input 
+                    type="date" 
+                    required 
+                    className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none bg-white"
+                    value={newItem.endDate} 
+                    onChange={(e) => setNewItem({...newItem, endDate: e.target.value})} 
+                  />
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-[#08194c] hover:bg-blue-900 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center">
+                <Plus className="w-4 h-4 mr-1" /> Adicionar Etapa
+              </button>
+            </form>
+
+            {/* Lista de Etapas */}
+            <div className="space-y-3 flex-1 overflow-y-auto">
+              {projectItems.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-6">Nenhuma etapa cadastrada neste projeto.</p>
+              ) : (
+                projectItems.map(item => {
+                  const status = getDaysStatus(item.endDate);
+                  return (
+                    <div key={item.id} className={`p-4 rounded-xl border transition-all ${item.completed ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-gray-200 shadow-sm'}`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start space-x-3">
+                          <button onClick={() => toggleComplete(item.id)} className="mt-0.5 text-blue-600 hover:text-blue-800 transition-colors">
+                            {item.completed ? <CheckCircle2 className="w-5 h-5 text-emerald-600 fill-emerald-100" /> : <Circle className="w-5 h-5 text-gray-300" />}
+                          </button>
+                          <div>
+                            <h4 className={`font-semibold text-sm ${item.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.title}</h4>
+                            <p className="text-xs text-gray-500 mt-1 flex items-center">
+                              <Calendar className="w-3.5 h-3.5 mr-1" /> {item.startDate} até {item.endDate}
+                            </p>
+                            <span className={`inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${item.completed ? 'bg-emerald-100 text-emerald-700' : status.color}`}>
+                              {item.completed ? 'Concluído' : status.text}
+                            </span>
+                          </div>
+                        </div>
+                        <button onClick={() => deleteTimelineItem(item.id)} className="text-gray-300 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Painel Direito: Gráfico de Gantt com Meses e Linha do Dia Atual */}
+          <div className="flex-1 p-6 overflow-x-auto flex flex-col bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-800 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-blue-600" /> Gráfico de Gantt (Timeline)
+              </h3>
+              <div className="flex items-center space-x-3 text-xs text-gray-500">
+                <span className="flex items-center"><span className="w-3 h-3 bg-orange-500 inline-block rounded-full mr-1.5"></span> Linha de Hoje</span>
+                <span className="flex items-center"><span className="w-3 h-3 bg-blue-500 inline-block rounded-md mr-1.5"></span> Período da Tarefa</span>
+              </div>
+            </div>
+
+            {/* Container Gráfico */}
+            <div className="flex-1 bg-gray-50 rounded-2xl border border-gray-200 p-4 overflow-x-auto relative min-w-[700px]">
+              
+              {/* Cabeçalho com os Meses */}
+              <div className="grid grid-cols-12 gap-2 border-b border-gray-200 pb-3 mb-4 sticky top-0 bg-gray-50 z-10">
+                {months.map((m, idx) => (
+                  <div key={m.name} className={`text-center font-bold text-xs uppercase tracking-wider py-1 rounded ${idx === currentMonthIndex ? 'bg-blue-600 text-white shadow' : 'text-gray-600 bg-gray-200/60'}`}>
+                    {m.name}
+                  </div>
+                ))}
+              </div>
+
+              {/* Linha vertical alaranjada indicando o dia atual */}
+              <div className="absolute top-16 bottom-4 w-0.5 bg-orange-500 z-20 pointer-events-none" style={{ left: `${((currentMonthIndex * 30 + currentDayNumber) / 365) * 100}%` }}>
+                <span className="absolute -top-3 -translate-x-1/2 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                  Hoje ({currentDayNumber})
+                </span>
+              </div>
+
+              {/* Barras de Tarefas no Gráfico */}
+              <div className="space-y-4 pt-2 relative">
+                {projectItems.length === 0 ? (
+                  <div className="text-center py-20 text-gray-400 text-sm">Adicione etapas à esquerda para vê-las no gráfico.</div>
+                ) : (
+                  projectItems.map((item, index) => {
+                    // Cálculo simples de posição baseada nas datas
+                    const startD = new Date(item.startDate);
+                    const endD = new Date(item.endDate);
+                    const startDayOfYear = (startD.getMonth() * 30) + startD.getDate();
+                    const endDayOfYear = (endD.getMonth() * 30) + endD.getDate();
+                    
+                    const leftPercent = Math.max(0, Math.min(95, (startDayOfYear / 365) * 100));
+                    const widthPercent = Math.max(5, Math.min(100 - leftPercent, ((endDayOfYear - startDayOfYear) / 365) * 100));
+
+                    return (
+                      <div key={item.id} className="relative h-14 bg-white rounded-xl border border-gray-200 flex items-center px-4 shadow-sm">
+                        <span className="w-48 truncate text-xs font-bold text-gray-700 mr-4">{item.title}</span>
+                        <div className="flex-1 relative h-6 bg-gray-100 rounded-lg">
+                          <div 
+                            className={`absolute h-full rounded-lg flex items-center px-3 text-white text-xs font-medium shadow-sm transition-all ${item.completed ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}
+                            style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                          >
+                            <span className="truncate">{item.startDate} até {item.endDate}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --- COMPONENTE: QUADRO KANBAN ---
+  const KanbanView = () => {
+    const [newListTitle, setNewListTitle] = useState('');
+    const [newTask, setNewTask] = useState({ title: '', listId: '', projectId: '', description: '' });
+    const [activeDropdownList, setActiveDropdownList] = useState(null);
+    const [activeDropdownTask, setActiveDropdownTask] = useState(null);
+
+    const handleAddList = (e) => {
+      e.preventDefault();
+      if (!newListTitle) return;
+      setKanbanLists([...kanbanLists, { id: generateId('l'), title: newListTitle }]);
+      setNewListTitle('');
+    };
+
+    const handleDeleteList = (listId) => {
+      setKanbanLists(kanbanLists.filter(l => l.id !== listId));
+      setTasks(tasks.filter(t => t.listId !== listId));
+      setActiveDropdownList(null);
+    };
+
+    const handleAddTask = (e, listId) => {
+      e.preventDefault();
+      if (!newTask.title) return;
+      setTasks([...tasks, {
+        id: generateId('t'),
+        title: newTask.title,
+        listId: listId,
+        projectId: newTask.projectId || projects[0]?.id || '',
+        description: newTask.description || '',
+        attachments: []
+      }]);
+      setNewTask({ title: '', listId: '', projectId: '', description: '' });
+    };
+
+    const moveTask = (taskId, targetListId) => {
+      setTasks(tasks.map(t => t.id === taskId ? { ...t, listId: targetListId } : t));
+    };
+
+    const deleteTask = (taskId) => {
+      setTasks(tasks.filter(t => t.id !== taskId));
+    };
+
+    return (
+      <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-300 w-full">
+        {/* Barra superior com opção de Criar Lista */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-[#08194c] flex items-center">
+              <KanbanSquare className="w-6 h-6 mr-3 text-blue-500" /> Quadros Kanban
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">Gerencie suas listas, cartões e tarefas conectadas aos clientes</p>
+          </div>
+          <form onSubmit={handleAddList} className="flex gap-2 w-full md:w-auto">
+            <input 
+              type="text" 
+              placeholder="Nome da nova lista..." 
+              className="p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c] flex-1 md:w-64"
+              value={newListTitle}
+              onChange={(e) => setNewListTitle(e.target.value)}
+            />
+            <button type="submit" className="bg-[#08194c] hover:bg-blue-900 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center shadow-md whitespace-nowrap">
+              <Plus className="w-4 h-4 mr-1" /> Criar Lista
+            </button>
+          </form>
+        </div>
+
+        {/* Listas do Kanban em Scroll Horizontal */}
+        <div className="flex-1 overflow-x-auto pb-24 flex items-start space-x-6">
+          {kanbanLists.map(list => {
+            const listTasks = tasks.filter(t => t.listId === list.id);
+            return (
+              <div 
+                key={list.id} 
+                data-list-title={list.title}
+                className="w-80 flex-shrink-0 bg-gray-50 rounded-2xl border border-gray-200/80 shadow-sm flex flex-col max-h-[calc(100vh-280px)]"
+              >
+                {/* Cabeçalho da Lista */}
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white rounded-t-2xl">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-gray-800">{list.title}</span>
+                    <span className="text-xs bg-blue-50 text-blue-600 font-bold px-2 py-0.5 rounded-full">
+                      {listTasks.length}
+                    </span>
+                  </div>
+
+                  {/* Menu 3 pontos da Lista */}
+                  <div className="relative">
+                    <button 
+                      onClick={() => setActiveDropdownList(activeDropdownList === list.id ? null : list.id)}
+                      className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {activeDropdownList === list.id && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setActiveDropdownList(null)}></div>
+                        <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 z-20 overflow-hidden">
+                          <button 
+                            onClick={() => handleDeleteList(list.id)}
+                            className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center transition-colors font-medium"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" /> Deletar Lista
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cartões / Tarefas */}
+                <div className="p-3 space-y-3 overflow-y-auto flex-1">
+                  {listTasks.map(task => (
+                    <div 
+                      key={task.id}
+                      onClick={() => setTaskDetailsModal(task)}
+                      className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer relative group"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
+                          {getProjectName(task.projectId)}
+                        </span>
+                        
+                        {/* Ações Rápidas no Cartão */}
+                        <div className="flex items-center space-x-1">
+                          <select 
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => moveTask(task.id, e.target.value)}
+                            value={task.listId}
+                            className="text-[10px] bg-gray-100 border border-gray-200 rounded p-1 outline-none text-gray-600 font-medium"
+                          >
+                            {kanbanLists.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      <h4 className="font-semibold text-gray-800 text-sm mb-2">{task.title}</h4>
+                      
+                      {task.description && (
+                        <p className="text-xs text-gray-500 line-clamp-2 mb-2">{task.description}</p>
+                      )}
+
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs text-gray-400">
+                        <div className="flex items-center space-x-2">
+                          {task.attachments && task.attachments.length > 0 && (
+                            <span className="flex items-center text-blue-600"><Paperclip className="w-3 h-3 mr-1" /> {task.attachments.length}</span>
+                          )}
+                        </div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                          className="hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Rodapé para Adicionar Tarefa na Lista */}
+                <div className="p-3 bg-white border-t border-gray-200 rounded-b-2xl">
+                  <form onSubmit={(e) => handleAddTask(e, list.id)} className="space-y-2">
+                    <input 
+                      type="text" 
+                      placeholder="Novo cartão..." 
+                      className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#08194c]"
+                      value={newTask.listId === list.id ? newTask.title : ''}
+                      onChange={(e) => setNewTask({ title: e.target.value, listId: list.id, projectId: projects[0]?.id || '' })}
+                    />
+                    <button type="submit" className="w-full bg-gray-100 hover:bg-[#08194c] hover:text-white text-gray-700 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center">
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar Cartão
+                    </button>
+                  </form>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // --- MODAL DETALHES DO CARTÃO (ANEXOS, LINKS E DESCRIÇÃO) ---
+  const TaskDetailsModal = () => {
+    if (!taskDetailsModal) return null;
+    const [currentTask, setCurrentTask] = useState(taskDetailsModal);
+    const [newLink, setNewLink] = useState('');
+
+    const handleUpdateTask = () => {
+      setTasks(tasks.map(t => t.id === currentTask.id ? currentTask : t));
+      setTaskDetailsModal(null);
+    };
+
+    const handleAddAttachment = (e) => {
+      e.preventDefault();
+      if (!newLink) return;
+      
+      // Trata links flexíveis (se não começar com http/https, adiciona https:// automaticamente por trás)
+      let formattedLink = newLink.trim();
+      if (!formattedLink.startsWith('http://') && !formattedLink.startsWith('https://')) {
+        formattedLink = 'https://' + formattedLink;
+      }
+
+      const updatedAttachments = [...(currentTask.attachments || []), formattedLink];
+      setCurrentTask({ ...currentTask, attachments: updatedAttachments });
+      setNewLink('');
+    };
+
+    const removeAttachment = (index) => {
+      const updatedAttachments = currentTask.attachments.filter((_, i) => i !== index);
+      setCurrentTask({ ...currentTask, attachments: updatedAttachments });
+    };
+
+    const handleDeleteCard = () => {
+      setTasks(tasks.filter(t => t.id !== currentTask.id));
+      setTaskDetailsModal(null);
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+          {/* Header */}
+          <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <h3 className="text-xl font-bold text-[#08194c] flex items-center">
+              <KanbanSquare className="w-5 h-5 mr-2 text-blue-500" /> Detalhes do Cartão
+            </h3>
+            <button onClick={() => setTaskDetailsModal(null)} className="text-gray-400 hover:text-gray-700">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="p-6 space-y-6 overflow-y-auto flex-1">
+            {/* Título do Cartão */}
+            <div>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Título</label>
+              <input 
+                type="text" 
+                className="w-full p-3 border border-gray-200 rounded-xl font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#08194c]"
+                value={currentTask.title}
+                onChange={(e) => setCurrentTask({ ...currentTask, title: e.target.value })}
+              />
+            </div>
+
+            {/* Descrição */}
+            <div>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1 flex items-center">
+                <AlignLeft className="w-4 h-4 mr-1 text-blue-500" /> Descrição
+              </label>
+              <textarea 
+                rows="4" 
+                placeholder="Adicione uma descrição detalhada..." 
+                className="w-full p-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]"
+                value={currentTask.description}
+                onChange={(e) => setCurrentTask({ ...currentTask, description: e.target.value })}
+              ></textarea>
+            </div>
+
+            {/* Anexos e Links Flexíveis */}
+            <div>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2 flex items-center">
+                <Paperclip className="w-4 h-4 mr-1 text-blue-500" /> Anexar Links, Imagens ou Arquivos
+              </label>
+              
+              <form onSubmit={handleAddAttachment} className="flex gap-2 mb-3">
+                <input 
+                  type="text" 
+                  placeholder="Ex: wa.me/5511999999999 ou https://drive.google.com..." 
+                  className="flex-1 p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]"
+                  value={newLink}
+                  onChange={(e) => setNewLink(e.target.value)}
+                />
+                <button type="submit" className="bg-blue-50 hover:bg-blue-100 text-[#08194c] px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+                  Anexar
+                </button>
+              </form>
+
+              <div className="space-y-2">
+                {currentTask.attachments && currentTask.attachments.map((link, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                    <a href={link} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline flex items-center truncate">
+                      <LinkIcon className="w-4 h-4 mr-2 flex-shrink-0" /> <span className="truncate">{link}</span>
+                    </a>
+                    <button onClick={() => removeAttachment(idx)} className="text-gray-400 hover:text-red-500 p-1">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+            <button 
+              onClick={handleDeleteCard}
+              className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-sm font-semibold transition-colors flex items-center"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" /> Excluir Cartão
+            </button>
+            <div className="flex space-x-3">
+              <button onClick={() => setTaskDetailsModal(null)} className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-semibold transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleUpdateTask} className="px-6 py-2.5 bg-[#08194c] hover:bg-blue-900 text-white rounded-xl text-sm font-semibold transition-colors shadow-md">
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
+      {!isAuthenticated ? (
+        // --- TELA DE LOGIN ---
+        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-[#08194c] to-blue-950 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md p-8 animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex flex-col items-center mb-8">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-4 text-[#08194c] shadow-inner">
+                <LayoutDashboard className="w-8 h-8" />
+              </div>
+              <h1 className="text-2xl font-bold text-[#08194c]">Oliveira Vitis</h1>
+              <p className="text-sm text-gray-500 mt-1">Faça login para acessar o painel</p>
+            </div>
+
+            {loginError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl font-medium">
+                {loginError}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Usuário</label>
+                <input 
+                  type="text" 
+                  placeholder="Digite seu e-mail" 
+                  required
+                  className="w-full p-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Senha</label>
+                <input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  required
+                  className="w-full p-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                className="w-full bg-[#08194c] hover:bg-blue-900 text-white py-3 rounded-xl font-semibold transition-colors shadow-lg mt-2 text-sm"
+              >
+                Entrar no Sistema
+              </button>
+            </form>
+
+            <div className="mt-6 text-center text-xs text-gray-400">
+              Oliveira Vitis • Acesso Restrito
+            </div>
+          </div>
+        </div>
+      ) : (
+        // --- APLICAÇÃO PRINCIPAL ---
+        <>
+          {/* Sidebar para navegação */}
+          <Sidebar />
+
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {/* Mobile Header Top Bar */}
+            <div className="md:hidden bg-[#08194c] text-white p-4 flex items-center justify-between flex-shrink-0">
+              <button onClick={() => setIsMobileMenuOpen(true)} className="p-1">
+                <Menu className="w-6 h-6" />
+              </button>
+              <span className="font-bold">Oliveira Vitis</span>
+              <div className="w-6"></div>
+            </div>
+
+            {/* Dynamic Tab Content */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8">
+              {activeTab === 'clientes' && <ClientesView />}
+              {activeTab === 'projetos' && <ProjetosView />}
+              {activeTab === 'kanban' && <KanbanView />}
+            </div>
+          </div>
+
+          {/* Modals */}
+          <TimelineModal />
+          <TaskDetailsModal />
+        </>
+      )}
+    </div>
+  );
+}
