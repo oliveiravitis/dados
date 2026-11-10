@@ -1113,6 +1113,137 @@
                 </div>
             );
         }
+        <!-- ... existing code ... -->
+<body class="bg-gray-100 overflow-hidden">
+    <div id="root"></div>
+
+    <!-- Módulo Firebase Global -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.FirebaseDB = {
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+            getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection
+        };
+    </script>
+
+    <!-- Script Principal React -->
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { 
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+            getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection 
+        } = window.FirebaseDB || {};
+        
+        // Configuração Global de Persistência
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'oliveira-vitis-app';
+        let db = null;
+        let auth = null;
+        let isFirebaseAvailable = false;
+
+        if (typeof __firebase_config !== 'undefined' && initializeApp) {
+            try {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                isFirebaseAvailable = true;
+            } catch (err) {
+                console.error("Erro ao inicializar conexão em nuvem:", err);
+            }
+        }
+
+        // Funções auxiliares para leitura/escrita no LocalStorage (fallback local)
+        const safeGetStorage = (key, fallback) => {
+            try {
+                const item = localStorage.getItem(key);
+                return item ? JSON.parse(item) : fallback;
+            } catch (e) {
+                return fallback;
+            }
+        };
+
+        const safeSetStorage = (key, value) => {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (e) {}
+        };
+
+        const Icon = ({ name, className = "w-5 h-5", ...props }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    window.lucide.createIcons({
+                        targets: [iconRef.current]
+                    });
+                }
+            });
+            return <i ref={iconRef} data-lucide={name} className={className} {...props}></i>;
+        };
+
+        // Dados Iniciais Padrão
+<!-- ... existing code ... -->
+            return (
+                <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
+                    {!isAuthenticated ? (
+                        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-[#08194c] to-blue-950 p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md p-8">
+                                <div className="flex flex-col items-center mb-8">
+                                    <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-4 text-[#08194c]">
+                                        <Icon name="layout-dashboard" className="w-8 h-8" />
+                                    </div>
+                                    <h1 className="text-2xl font-bold text-[#08194c]">Oliveira Vitis</h1>
+                                    <p className="text-sm text-gray-500 mt-1">Faça login para acessar o painel</p>
+                                </div>
+                                {loginError && (
+                                    <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl font-medium">{loginError}</div>
+                                )}
+                                <form onSubmit={handleLogin} className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Usuário</label>
+                                        <input type="text" placeholder="Digite seu e-mail" required className="w-full p-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Senha</label>
+                                        <input type="password" placeholder="••••••••" required className="w-full p-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+                                    </div>
+                                    <button type="submit" className="w-full bg-[#08194c] hover:bg-blue-900 text-white py-3 rounded-xl font-semibold shadow-lg mt-2 text-sm transition-colors">Entrar no Sistema</button>
+                                </form>
+                                <div className="mt-6 text-center text-xs text-gray-400">Oliveira Vitis • Acesso Restrito</div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <Sidebar />
+                            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                                <div className="md:hidden bg-[#08194c] text-white p-4 flex items-center justify-between flex-shrink-0">
+                                    <button onClick={() => setIsMobileMenuOpen(true)} className="p-1">
+                                        <Icon name="menu" className="w-6 h-6" />
+                                    </button>
+                                    <span className="font-bold">Oliveira Vitis</span>
+                                    <div className="w-6"></div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                                    {activeTab === 'clientes' && <ClientesView />}
+                                    {activeTab === 'projetos' && <ProjetosView />}
+                                    {activeTab === 'kanban' && <KanbanView />}
+                                </div>
+                            </div>
+                            <TimelineModal />
+                            <TaskDetailsModal />
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
 
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
