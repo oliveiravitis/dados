@@ -21,31 +21,32 @@
 <body class="bg-gray-100 overflow-hidden">
     <div id="root"></div>
 
+    <!-- Firebase SDKs via CDN -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Configuração do Firebase da Oliveira Vitis
+        const firebaseConfig = {
+            apiKey: "AIzaSyC1h8TG5MD77p49L72rvY7gLmZ05Kdukv0",
+            authDomain: "oliveira-vitis-db.firebaseapp.com",
+            projectId: "oliveira-vitis-db",
+            storageBucket: "oliveira-vitis-db.firebasestorage.app",
+            messagingSenderId: "888823209400",
+            appId: "1:888823209400:web:9a748258662c025dacc34d",
+            measurementId: "G-04F0WR5CWQ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Disponibiliza globalmente para o React interagir com o Firestore
+        window.firebaseDB = { db, collection, getDocs, setDoc, doc, deleteDoc };
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
-
-        // Custom Hook para Salvar Automático no Dispositivo (LocalStorage)
-        const useLocalStorage = (key, initialValue) => {
-            const [storedValue, setStoredValue] = useState(() => {
-                try {
-                    const item = window.localStorage.getItem(key);
-                    return item ? JSON.parse(item) : initialValue;
-                } catch (error) {
-                    return initialValue;
-                }
-            });
-
-            const setValue = (value) => {
-                try {
-                    const valueToStore = value instanceof Function ? value(storedValue) : value;
-                    setStoredValue(valueToStore);
-                    window.localStorage.setItem(key, JSON.stringify(valueToStore));
-                } catch (error) {
-                    console.error("Erro ao salvar no local storage", error);
-                }
-            };
-            return [storedValue, setValue];
-        };
 
         // Componente de Ícone do Lucide (Compatibilidade)
         const Icon = ({ name, className = "w-5 h-5", ...props }) => {
@@ -61,17 +62,18 @@
         };
 
         function App() {
-            // States salvos no LocalStorage para não perder ao dar F5
-            const [isAuthenticated, setIsAuthenticated] = useLocalStorage('ov_auth', false);
-            const [clients, setClients] = useLocalStorage('ov_clients', []);
-            const [projects, setProjects] = useLocalStorage('ov_projects', []);
-            const [timelineItems, setTimelineItems] = useLocalStorage('ov_timeline', []);
-            const [kanbanLists, setKanbanLists] = useLocalStorage('ov_kanban_lists', [
+            // States principais
+            const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('ov_auth') === 'true');
+            const [clients, setClients] = useState([]);
+            const [projects, setProjects] = useState([]);
+            const [timelineItems, setTimelineItems] = useState([]);
+            const [kanbanLists, setKanbanLists] = useState([
                 { id: 'todo', title: 'A Fazer' },
                 { id: 'in-progress', title: 'Em Andamento' },
                 { id: 'done', title: 'Concluído' }
             ]);
-            const [tasks, setTasks] = useLocalStorage('ov_tasks', []);
+            const [tasks, setTasks] = useState([]);
+            const [isSyncing, setIsSyncing] = useState(false);
 
             // Navigation & UI States
             const [activeTab, setActiveTab] = useState('clientes');
@@ -86,8 +88,71 @@
             const [loginPassword, setLoginPassword] = useState('');
             const [loginError, setLoginError] = useState('');
 
-            // Export / Import State
-            const fileInputRef = useRef(null);
+            // Carregar dados do Firebase ao iniciar
+            useEffect(() => {
+                const loadCloudData = async () => {
+                    if (!window.firebaseDB) return;
+                    setIsSyncing(true);
+                    try {
+                        const { db, collection, getDocs } = window.firebaseDB;
+                        
+                        // Carregar Clientes
+                        const clientsSnap = await getDocs(collection(db, "clients"));
+                        if (!clientsSnap.empty) {
+                            setClients(clientsSnap.docs.map(d => d.data()));
+                        }
+                        // Carregar Projetos
+                        const projSnap = await getDocs(collection(db, "projects"));
+                        if (!projSnap.empty) {
+                            setProjects(projSnap.docs.map(d => d.data()));
+                        }
+                        // Carregar Timeline
+                        const timeSnap = await getDocs(collection(db, "timeline"));
+                        if (!timeSnap.empty) {
+                            setTimelineItems(timeSnap.docs.map(d => d.data()));
+                        }
+                        // Carregar Listas Kanban
+                        const listsSnap = await getDocs(collection(db, "kanbanLists"));
+                        if (!listsSnap.empty) {
+                            setKanbanLists(listsSnap.docs.map(d => d.data()));
+                        }
+                        // Carregar Tarefas
+                        const tasksSnap = await getDocs(collection(db, "tasks"));
+                        if (!tasksSnap.empty) {
+                            setTasks(tasksSnap.docs.map(d => d.data()));
+                        }
+                    } catch (e) {
+                        console.error("Erro ao sincronizar com nuvem:", e);
+                    } finally {
+                        setIsSyncing(false);
+                    }
+                };
+
+                window.addEventListener('firebase-ready', loadCloudData);
+                if (window.firebaseDB) loadCloudData();
+                return () => window.removeEventListener('firebase-ready', loadCloudData);
+            }, []);
+
+            // Função genérica para salvar dados na nuvem automaticamente
+            const saveToCloud = async (collectionName, id, data) => {
+                if (!window.firebaseDB) return;
+                try {
+                    const { db, doc, setDoc } = window.firebaseDB;
+                    await setDoc(doc(db, collectionName, id), data);
+                } catch (e) {
+                    console.error("Erro ao gravar na nuvem:", e);
+                }
+            };
+
+            const removeFromCloud = async (collectionName, id) => {
+                if (!window.firebaseDB) return;
+                try {
+                    const { db, doc, deleteDoc } = window.firebaseDB;
+                    await deleteDoc(doc(db, collectionName, id));
+                } catch (e) {
+                    console.error("Erro ao remover da nuvem:", e);
+                }
+            };
 
             const handleLogin = (e) => {
                 e.preventDefault();
@@ -96,6 +161,7 @@
                     loginPassword === 'Cristhian20053192@'
                 ) {
                     setIsAuthenticated(true);
+                    localStorage.setItem('ov_auth', 'true');
                     setLoginError('');
                 } else {
                     setLoginError('Acesso negado. Credenciais inválidas.');
@@ -104,6 +170,7 @@
 
             const handleLogout = () => {
                 setIsAuthenticated(false);
+                localStorage.removeItem('ov_auth');
                 setLoginEmail('');
                 setLoginPassword('');
             };
@@ -114,38 +181,6 @@
             const formatWhatsApp = (contact) => {
                 const digits = contact.replace(/\D/g, '');
                 return digits.length >= 10 ? `https://wa.me/55${digits}` : null;
-            };
-
-            // Funções de Backup
-            const exportBackup = () => {
-                const data = { clients, projects, timelineItems, kanbanLists, tasks };
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `backup_oliveira_vitis_${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
-            };
-
-            const importBackup = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const data = JSON.parse(event.target.result);
-                        if (data.clients) setClients(data.clients);
-                        if (data.projects) setProjects(data.projects);
-                        if (data.timelineItems) setTimelineItems(data.timelineItems);
-                        if (data.kanbanLists) setKanbanLists(data.kanbanLists);
-                        if (data.tasks) setTasks(data.tasks);
-                        alert("Dados restaurados com sucesso! Você pode continuar seu trabalho de onde parou.");
-                        window.location.reload(); // Recarrega para aplicar os dados
-                    } catch (err) {
-                        alert("Erro ao ler o arquivo de backup.");
-                    }
-                };
-                reader.readAsText(file);
             };
 
             // --- COMPONENTE: SIDEBAR ---
@@ -175,19 +210,13 @@
                                 <span>{item.label}</span>
                             </button>
                         ))}
-
-                        <div className="pt-6 mt-6 border-t border-blue-950/50">
-                            <p className="px-4 text-[10px] font-bold text-blue-300 mb-2 uppercase tracking-widest text-center">Transferir para outro Celular/PC</p>
-                            <button onClick={exportBackup} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-blue-600/30 text-sm text-white hover:bg-blue-600/50 rounded-xl transition-colors font-medium border border-blue-500/30">
-                                <Icon name="download" className="w-4 h-4" /> <span>Baixar Dados</span>
-                            </button>
-                            <button onClick={() => fileInputRef.current.click()} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 text-sm text-blue-200 hover:text-white hover:bg-white/10 rounded-xl transition-colors mt-2 border border-transparent hover:border-white/10">
-                                <Icon name="upload" className="w-4 h-4" /> <span>Carregar Dados</span>
-                            </button>
-                            <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={importBackup} />
-                        </div>
                     </nav>
+
                     <div className="p-4 border-t border-blue-950/50">
+                        <div className="flex items-center space-x-2 text-xs text-blue-300 mb-3 px-2">
+                            <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-yellow-400 animate-ping' : 'bg-emerald-400'}`}></span>
+                            <span>{isSyncing ? 'Sincronizando nuvem...' : 'Salvamento em Nuvem Ativo'}</span>
+                        </div>
                         <button onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white transition-colors text-sm font-medium">
                             <Icon name="log-out" className="w-4 h-4" />
                             <span>Sair</span>
@@ -208,16 +237,23 @@
                     e.preventDefault();
                     if (!newClient.name || !newClient.company) return;
                     const newClientId = generateId('c');
-                    setClients([...clients, { ...newClient, id: newClientId }]);
+                    const clientData = { ...newClient, id: newClientId };
+                    
+                    setClients([...clients, clientData]);
+                    saveToCloud("clients", newClientId, clientData);
                     
                     const newListId = generateId('l');
-                    setKanbanLists([...kanbanLists, { id: newListId, title: newClient.name }]);
+                    const listData = { id: newListId, title: newClient.name };
+                    setKanbanLists([...kanbanLists, listData]);
+                    saveToCloud("kanbanLists", newListId, listData);
+
                     setNewClient({ name: '', company: '', contact: '', plan: 'Plano Básico', isFreeTrial: false, trialDuration: '' });
                 };
 
                 const handleDeleteClient = (e, id) => {
                     e.stopPropagation();
                     setClients(clients.filter(c => c.id !== id));
+                    removeFromCloud("clients", id);
                     setActiveDropdown(null);
                 };
 
@@ -406,13 +442,16 @@
                 const handleAddProject = (e) => {
                     e.preventDefault();
                     if (!newProject.title || !newProject.clientId) return;
-                    setProjects([...projects, { ...newProject, id: generateId('p') }]);
+                    const projData = { ...newProject, id: generateId('p') };
+                    setProjects([...projects, projData]);
+                    saveToCloud("projects", projData.id, projData);
                     setNewProject({ title: '', clientId: '' });
                 };
 
                 const handleDeleteProject = (e, id) => {
                     e.stopPropagation();
                     setProjects(projects.filter(p => p.id !== id));
+                    removeFromCloud("projects", id);
                     setActiveDropdown(null);
                 };
 
@@ -517,21 +556,32 @@
                 const handleAddItem = (e) => {
                     e.preventDefault();
                     if (!newItem.title || !newItem.startDate || !newItem.endDate) return;
-                    setTimelineItems([...timelineItems, {
+                    const timeData = {
                         id: generateId('tl'),
                         projectId: timelineModalProject.id,
                         ...newItem,
                         completed: false
-                    }]);
+                    };
+                    setTimelineItems([...timelineItems, timeData]);
+                    saveToCloud("timeline", timeData.id, timeData);
                     setNewItem({ title: '', startDate: '', endDate: '' });
                 };
 
                 const toggleComplete = (id) => {
-                    setTimelineItems(timelineItems.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
+                    const updated = timelineItems.map(item => {
+                        if (item.id === id) {
+                            const changed = { ...item, completed: !item.completed };
+                            saveToCloud("timeline", id, changed);
+                            return changed;
+                        }
+                        return item;
+                    });
+                    setTimelineItems(updated);
                 };
 
                 const deleteTimelineItem = (id) => {
                     setTimelineItems(timelineItems.filter(item => item.id !== id));
+                    removeFromCloud("timeline", id);
                 };
 
                 const getDaysStatus = (endDateStr) => {
@@ -699,12 +749,15 @@
                 const handleAddList = (e) => {
                     e.preventDefault();
                     if (!newListTitle) return;
-                    setKanbanLists([...kanbanLists, { id: generateId('l'), title: newListTitle }]);
+                    const listData = { id: generateId('l'), title: newListTitle };
+                    setKanbanLists([...kanbanLists, listData]);
+                    saveToCloud("kanbanLists", listData.id, listData);
                     setNewListTitle('');
                 };
 
                 const handleDeleteList = (listId) => {
                     setKanbanLists(kanbanLists.filter(l => l.id !== listId));
+                    removeFromCloud("kanbanLists", listId);
                     setTasks(tasks.filter(t => t.listId !== listId));
                     setActiveDropdownList(null);
                 };
@@ -712,23 +765,34 @@
                 const handleAddTask = (e, listId) => {
                     e.preventDefault();
                     if (!newTask.title) return;
-                    setTasks([...tasks, {
+                    const taskData = {
                         id: generateId('t'),
                         title: newTask.title,
                         listId: listId,
                         projectId: newTask.projectId || projects[0]?.id || '',
                         description: newTask.description || '',
                         attachments: []
-                    }]);
+                    };
+                    setTasks([...tasks, taskData]);
+                    saveToCloud("tasks", taskData.id, taskData);
                     setNewTask({ title: '', listId: '', projectId: '', description: '' });
                 };
 
                 const moveTask = (taskId, targetListId) => {
-                    setTasks(tasks.map(t => t.id === taskId ? { ...t, listId: targetListId } : t));
+                    const updated = tasks.map(t => {
+                        if (t.id === taskId) {
+                            const changed = { ...t, listId: targetListId };
+                            saveToCloud("tasks", taskId, changed);
+                            return changed;
+                        }
+                        return t;
+                    });
+                    setTasks(updated);
                 };
 
                 const deleteTask = (taskId) => {
                     setTasks(tasks.filter(t => t.id !== taskId));
+                    removeFromCloud("tasks", taskId);
                 };
 
                 return (
@@ -821,7 +885,13 @@
                 const [newLink, setNewLink] = useState('');
 
                 const handleUpdateTask = () => {
-                    setTasks(tasks.map(t => t.id === currentTask.id ? currentTask : t));
+                    setTasks(tasks.map(t => {
+                        if (t.id === currentTask.id) {
+                            saveToCloud("tasks", currentTask.id, currentTask);
+                            return currentTask;
+                        }
+                        return t;
+                    }));
                     setTaskDetailsModal(null);
                 };
 
@@ -844,6 +914,7 @@
 
                 const handleDeleteCard = () => {
                     setTasks(tasks.filter(t => t.id !== currentTask.id));
+                    removeFromCloud("tasks", currentTask.id);
                     setTaskDetailsModal(null);
                 };
 
