@@ -21,16 +21,37 @@
 <body class="bg-gray-100 overflow-hidden">
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         const { useState, useEffect } = React;
         
-        // Funções auxiliares para leitura/escrita segura no LocalStorage
+        // Configuração Global de Persistência
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'oliveira-vitis-app';
+        let db = null;
+        let auth = null;
+        let isFirebaseAvailable = false;
+
+        if (typeof __firebase_config !== 'undefined') {
+            try {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                isFirebaseAvailable = true;
+            } catch (err) {
+                console.error("Erro ao inicializar conexão em nuvem:", err);
+            }
+        }
+
+        // Funções auxiliares para leitura/escrita no LocalStorage (fallback local)
         const safeGetStorage = (key, fallback) => {
             try {
                 const item = localStorage.getItem(key);
                 return item ? JSON.parse(item) : fallback;
             } catch (e) {
-                console.error(`Erro ao carregar ${key} do localStorage:`, e);
                 return fallback;
             }
         };
@@ -38,12 +59,9 @@
         const safeSetStorage = (key, value) => {
             try {
                 localStorage.setItem(key, JSON.stringify(value));
-            } catch (e) {
-                console.error(`Erro ao salvar ${key} no localStorage:`, e);
-            }
+            } catch (e) {}
         };
 
-        // Lucide Icon Helpers for React
         const Icon = ({ name, className = "w-5 h-5", ...props }) => {
             useEffect(() => {
                 if (window.lucide) {
@@ -53,53 +71,258 @@
             return <i data-lucide={name} className={className} {...props}></i>;
         };
 
+        // Dados Iniciais Padrão
+        const defaultClients = [
+            { id: 'c1', name: 'João Silva', company: 'TechCorp', contact: '11999999999', plan: 'Plano Pro', isFreeTrial: false, trialDuration: '' },
+            { id: 'c2', name: 'Maria Souza', company: 'Design Co.', contact: 'maria@designco.com', plan: 'Plano Básico', isFreeTrial: true, trialDuration: '14 dias' }
+        ];
+
+        const defaultProjects = [
+            { id: 'p1', title: 'Redesign do Site', clientId: 'c1' },
+            { id: 'p2', title: 'Campanha de Marketing', clientId: 'c2' }
+        ];
+
+        const defaultTimelineItems = [
+            { id: 'tl1', projectId: 'p1', title: 'Fase de Design', startDate: '2026-11-01', endDate: '2026-11-15', completed: false },
+            { id: 'tl2', projectId: 'p1', title: 'Desenvolvimento', startDate: '2026-11-16', endDate: '2026-12-10', completed: false }
+        ];
+
+        const defaultKanbanLists = [
+            { id: 'todo', title: 'A Fazer' },
+            { id: 'in-progress', title: 'Em Andamento' },
+            { id: 'done', title: 'Concluído' },
+            { id: 'client-c1', title: 'João Silva' },
+            { id: 'client-c2', title: 'Maria Souza' }
+        ];
+
+        const defaultTasks = [
+            { id: 't1', title: 'Criar wireframes da página inicial', projectId: 'p1', listId: 'todo', description: 'Focar na usabilidade mobile primeiramente.', attachments: [] },
+            { id: 't2', title: 'Aprovar orçamento com cliente', projectId: 'p2', listId: 'in-progress', description: '', attachments: [] },
+            { id: 't3', title: 'Reunião de Kickoff', projectId: 'p1', listId: 'done', description: '', attachments: [] }
+        ];
+
         function App() {
-            // Navigation State
             const [activeTab, setActiveTab] = useState('kanban');
             const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-            // Global State com Persistência em LocalStorage
-            const [clients, setClients] = useState(() => safeGetStorage('ov_clients', [
-                { id: 'c1', name: 'João Silva', company: 'TechCorp', contact: '11999999999', plan: 'Plano Pro', isFreeTrial: false, trialDuration: '' },
-                { id: 'c2', name: 'Maria Souza', company: 'Design Co.', contact: 'maria@designco.com', plan: 'Plano Básico', isFreeTrial: true, trialDuration: '14 dias' }
-            ]));
+            // Cloud User Auth State
+            const [cloudUser, setCloudUser] = useState(null);
 
-            const [projects, setProjects] = useState(() => safeGetStorage('ov_projects', [
-                { id: 'p1', title: 'Redesign do Site', clientId: 'c1' },
-                { id: 'p2', title: 'Campanha de Marketing', clientId: 'c2' }
-            ]));
+            // Core State loaded with fallback
+            const [clients, setClients] = useState(() => safeGetStorage('ov_clients', defaultClients));
+            const [projects, setProjects] = useState(() => safeGetStorage('ov_projects', defaultProjects));
+            const [timelineItems, setTimelineItems] = useState(() => safeGetStorage('ov_timelineItems', defaultTimelineItems));
+            const [kanbanLists, setKanbanLists] = useState(() => safeGetStorage('ov_kanbanLists', defaultKanbanLists));
+            const [tasks, setTasks] = useState(() => safeGetStorage('ov_tasks', defaultTasks));
 
-            const [timelineItems, setTimelineItems] = useState(() => safeGetStorage('ov_timelineItems', [
-                { id: 'tl1', projectId: 'p1', title: 'Fase de Design', startDate: '2026-11-01', endDate: '2026-11-15', completed: false },
-                { id: 'tl2', projectId: 'p1', title: 'Desenvolvimento', startDate: '2026-11-16', endDate: '2026-12-10', completed: false }
-            ]));
+            // Authentication & Firebase Setup
+            useEffect(() => {
+                if (!isFirebaseAvailable || !auth) return;
+                const initCloudAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (e) {
+                        try { await signInAnonymously(auth); } catch(err){}
+                    }
+                };
+                initCloudAuth();
+                const unsub = onAuthStateChanged(auth, (u) => setCloudUser(u));
+                return () => unsub();
+            }, []);
 
-            const [kanbanLists, setKanbanLists] = useState(() => safeGetStorage('ov_kanbanLists', [
-                { id: 'todo', title: 'A Fazer' },
-                { id: 'in-progress', title: 'Em Andamento' },
-                { id: 'done', title: 'Concluído' },
-                { id: 'client-c1', title: 'João Silva' },
-                { id: 'client-c2', title: 'Maria Souza' }
-            ]));
+            // Real-time Cloud Synchronization (Sincronização em Tempo Real na Nuvem)
+            useEffect(() => {
+                if (!isFirebaseAvailable || !db || !cloudUser) return;
 
-            const [tasks, setTasks] = useState(() => safeGetStorage('ov_tasks', [
-                { id: 't1', title: 'Criar wireframes da página inicial', projectId: 'p1', listId: 'todo', description: 'Focar na usabilidade mobile primeiramente.', attachments: [] },
-                { id: 't2', title: 'Aprovar orçamento com cliente', projectId: 'p2', listId: 'in-progress', description: '', attachments: [] },
-                { id: 't3', title: 'Reunião de Kickoff', projectId: 'p1', listId: 'done', description: '', attachments: [] }
-            ]));
+                const unsubClients = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'clients'), (snapshot) => {
+                    if (!snapshot.empty) {
+                        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setClients(data);
+                        safeSetStorage('ov_clients', data);
+                    } else {
+                        defaultClients.forEach(c => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clients', c.id), c));
+                    }
+                }, (err) => console.error(err));
 
-            // Sincronizar dados automaticamente com o LocalStorage sempre que houver mudanças
-            useEffect(() => { safeSetStorage('ov_clients', clients); }, [clients]);
-            useEffect(() => { safeSetStorage('ov_projects', projects); }, [projects]);
-            useEffect(() => { safeSetStorage('ov_timelineItems', timelineItems); }, [timelineItems]);
-            useEffect(() => { safeSetStorage('ov_kanbanLists', kanbanLists); }, [kanbanLists]);
-            useEffect(() => { safeSetStorage('ov_tasks', tasks); }, [tasks]);
+                const unsubProjects = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'projects'), (snapshot) => {
+                    if (!snapshot.empty) {
+                        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setProjects(data);
+                        safeSetStorage('ov_projects', data);
+                    } else {
+                        defaultProjects.forEach(p => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', p.id), p));
+                    }
+                }, (err) => console.error(err));
+
+                const unsubTimeline = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'timelineItems'), (snapshot) => {
+                    if (!snapshot.empty) {
+                        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setTimelineItems(data);
+                        safeSetStorage('ov_timelineItems', data);
+                    } else {
+                        defaultTimelineItems.forEach(t => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'timelineItems', t.id), t));
+                    }
+                }, (err) => console.error(err));
+
+                const unsubKanban = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'kanbanLists'), (snapshot) => {
+                    if (!snapshot.empty) {
+                        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setKanbanLists(data);
+                        safeSetStorage('ov_kanbanLists', data);
+                    } else {
+                        defaultKanbanLists.forEach(k => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'kanbanLists', k.id), k));
+                    }
+                }, (err) => console.error(err));
+
+                const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'tasks'), (snapshot) => {
+                    if (!snapshot.empty) {
+                        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setTasks(data);
+                        safeSetStorage('ov_tasks', data);
+                    } else {
+                        defaultTasks.forEach(t => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', t.id), t));
+                    }
+                }, (err) => console.error(err));
+
+                return () => {
+                    unsubClients();
+                    unsubProjects();
+                    unsubTimeline();
+                    unsubKanban();
+                    unsubTasks();
+                };
+            }, [cloudUser]);
+
+            // Handlers para salvar automaticamente (sem precisar baixar backups)
+            const dbSaveClient = (clientObj) => {
+                setClients(prev => {
+                    const exists = prev.some(c => c.id === clientObj.id);
+                    const updated = exists ? prev.map(c => c.id === clientObj.id ? clientObj : c) : [...prev, clientObj];
+                    safeSetStorage('ov_clients', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clients', clientObj.id), clientObj);
+                }
+            };
+
+            const dbDeleteClient = (clientId) => {
+                setClients(prev => {
+                    const updated = prev.filter(c => c.id !== clientId);
+                    safeSetStorage('ov_clients', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clients', clientId));
+                }
+            };
+
+            const dbSaveProject = (projectObj) => {
+                setProjects(prev => {
+                    const exists = prev.some(p => p.id === projectObj.id);
+                    const updated = exists ? prev.map(p => p.id === projectObj.id ? projectObj : p) : [...prev, projectObj];
+                    safeSetStorage('ov_projects', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', projectObj.id), projectObj);
+                }
+            };
+
+            const dbDeleteProject = (projectId) => {
+                setProjects(prev => {
+                    const updated = prev.filter(p => p.id !== projectId);
+                    safeSetStorage('ov_projects', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'projects', projectId));
+                }
+            };
+
+            const dbSaveKanbanList = (listObj) => {
+                setKanbanLists(prev => {
+                    const exists = prev.some(l => l.id === listObj.id);
+                    const updated = exists ? prev.map(l => l.id === listObj.id ? listObj : l) : [...prev, listObj];
+                    safeSetStorage('ov_kanbanLists', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'kanbanLists', listObj.id), listObj);
+                }
+            };
+
+            const dbDeleteKanbanList = (listId) => {
+                setKanbanLists(prev => {
+                    const updated = prev.filter(l => l.id !== listId);
+                    safeSetStorage('ov_kanbanLists', updated);
+                    return updated;
+                });
+                setTasks(prev => {
+                    const updatedTasks = prev.filter(t => t.listId !== listId);
+                    safeSetStorage('ov_tasks', updatedTasks);
+                    return updatedTasks;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'kanbanLists', listId));
+                }
+            };
+
+            const dbSaveTask = (taskObj) => {
+                setTasks(prev => {
+                    const exists = prev.some(t => t.id === taskObj.id);
+                    const updated = exists ? prev.map(t => t.id === taskObj.id ? taskObj : t) : [...prev, taskObj];
+                    safeSetStorage('ov_tasks', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskObj.id), taskObj);
+                }
+            };
+
+            const dbDeleteTask = (taskId) => {
+                setTasks(prev => {
+                    const updated = prev.filter(t => t.id !== taskId);
+                    safeSetStorage('ov_tasks', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId));
+                }
+            };
+
+            const dbSaveTimelineItem = (itemObj) => {
+                setTimelineItems(prev => {
+                    const exists = prev.some(t => t.id === itemObj.id);
+                    const updated = exists ? prev.map(t => t.id === itemObj.id ? itemObj : t) : [...prev, itemObj];
+                    safeSetStorage('ov_timelineItems', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'timelineItems', itemObj.id), itemObj);
+                }
+            };
+
+            const dbDeleteTimelineItem = (itemId) => {
+                setTimelineItems(prev => {
+                    const updated = prev.filter(t => t.id !== itemId);
+                    safeSetStorage('ov_timelineItems', updated);
+                    return updated;
+                });
+                if (isFirebaseAvailable && db && cloudUser) {
+                    deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'timelineItems', itemId));
+                }
+            };
 
             // Modal States
             const [timelineModalProject, setTimelineModalProject] = useState(null);
             const [taskDetailsModal, setTaskDetailsModal] = useState(null);
 
-            // Authentication State (salvo com segurança para não deslogar ao recarregar)
+            // Authentication State
             const [isAuthenticated, setIsAuthenticated] = useState(() => safeGetStorage('ov_auth', false));
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
@@ -130,38 +353,6 @@
                 safeSetStorage('ov_auth', false);
                 setLoginEmail('');
                 setLoginPassword('');
-            };
-
-            // Função para Exportar Backup em arquivo JSON
-            const exportData = () => {
-                const data = { clients, projects, timelineItems, kanbanLists, tasks };
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `oliveira-vitis-backup-${new Date().toISOString().slice(0,10)}.json`;
-                a.click();
-            };
-
-            // Função para Importar Backup de arquivo JSON
-            const importData = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const parsed = JSON.parse(event.target.result);
-                        if (parsed.clients) setClients(parsed.clients);
-                        if (parsed.projects) setProjects(parsed.projects);
-                        if (parsed.timelineItems) setTimelineItems(parsed.timelineItems);
-                        if (parsed.kanbanLists) setKanbanLists(parsed.kanbanLists);
-                        if (parsed.tasks) setTasks(parsed.tasks);
-                        alert('Backup importado com sucesso!');
-                    } catch (err) {
-                        alert('Erro ao carregar o arquivo de backup. Certifique-se de que é um JSON válido.');
-                    }
-                };
-                reader.readAsText(file);
             };
 
             const generateId = (prefix) => `${prefix}${Math.random().toString(36).substr(2, 9)}`;
@@ -208,22 +399,15 @@
                                 );
                             })}
                         </nav>
-                        <div className="p-4 border-t border-blue-950/50 space-y-2">
-                            <button
-                                onClick={exportData}
-                                className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl bg-blue-900/50 hover:bg-blue-800 text-blue-100 transition-colors text-xs font-medium"
-                            >
-                                <Icon name="download" className="w-4 h-4" />
-                                <span>Exportar Backup (JSON)</span>
-                            </button>
-                            <label className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl bg-blue-900/30 hover:bg-blue-800 text-blue-200 cursor-pointer transition-colors text-xs font-medium">
-                                <Icon name="upload" className="w-4 h-4" />
-                                <span>Importar Backup</span>
-                                <input type="file" accept=".json" onChange={importData} className="hidden" />
-                            </label>
+                        
+                        <div className="p-4 border-t border-blue-950/50 space-y-3">
+                            <div className="flex items-center space-x-2 text-xs bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 px-3 py-2 rounded-xl">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span className="font-medium">Salvamento Automático Ativo</span>
+                            </div>
                             <button
                                 onClick={handleLogout}
-                                className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white transition-colors text-sm font-medium mt-2"
+                                className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white transition-colors text-sm font-medium"
                             >
                                 <span>Encerrar Sessão</span>
                             </button>
@@ -244,17 +428,18 @@
                     e.preventDefault();
                     if (!newClient.name || !newClient.company) return;
                     const newClientId = generateId('c');
-                    setClients([...clients, { ...newClient, id: newClientId }]);
+                    const clientObj = { ...newClient, id: newClientId };
+                    dbSaveClient(clientObj);
                     
                     const newListId = generateId('l');
-                    setKanbanLists([...kanbanLists, { id: newListId, title: newClient.name }]);
+                    dbSaveKanbanList({ id: newListId, title: newClient.name });
 
                     setNewClient({ name: '', company: '', contact: '', plan: 'Plano Básico', isFreeTrial: false, trialDuration: '' });
                 };
 
                 const handleDeleteClient = (e, id) => {
                     e.stopPropagation();
-                    setClients(clients.filter(c => c.id !== id));
+                    dbDeleteClient(id);
                     setActiveDropdown(null);
                 };
 
@@ -421,13 +606,13 @@
                 const handleAddProject = (e) => {
                     e.preventDefault();
                     if (!newProject.title || !newProject.clientId) return;
-                    setProjects([...projects, { ...newProject, id: generateId('p') }]);
+                    dbSaveProject({ ...newProject, id: generateId('p') });
                     setNewProject({ title: '', clientId: '' });
                 };
 
                 const handleDeleteProject = (e, id) => {
                     e.stopPropagation();
-                    setProjects(projects.filter(p => p.id !== id));
+                    dbDeleteProject(id);
                     setActiveDropdown(null);
                 };
 
@@ -522,16 +707,16 @@
                 const handleAddItem = (e) => {
                     e.preventDefault();
                     if (!newItem.title || !newItem.startDate || !newItem.endDate) return;
-                    setTimelineItems([...timelineItems, { id: generateId('tl'), projectId: timelineModalProject.id, ...newItem, completed: false }]);
+                    dbSaveTimelineItem({ id: generateId('tl'), projectId: timelineModalProject.id, ...newItem, completed: false });
                     setNewItem({ title: '', startDate: '', endDate: '' });
                 };
 
-                const toggleComplete = (id) => {
-                    setTimelineItems(timelineItems.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
+                const toggleComplete = (item) => {
+                    dbSaveTimelineItem({ ...item, completed: !item.completed });
                 };
 
                 const deleteTimelineItem = (id) => {
-                    setTimelineItems(timelineItems.filter(item => item.id !== id));
+                    dbDeleteTimelineItem(id);
                 };
 
                 const getDaysStatus = (endDateStr) => {
@@ -600,7 +785,7 @@
                                                 <div key={item.id} className={`p-4 rounded-xl border ${item.completed ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-gray-200 shadow-sm'}`}>
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex items-start space-x-3">
-                                                            <button onClick={() => toggleComplete(item.id)} className="mt-0.5 text-blue-600">
+                                                            <button onClick={() => toggleComplete(item)} className="mt-0.5 text-blue-600">
                                                                 {item.completed ? <Icon name="check-circle-2" className="w-5 h-5 text-emerald-600" /> : <Icon name="circle" className="w-5 h-5 text-gray-300" />}
                                                             </button>
                                                             <div>
@@ -685,29 +870,28 @@
                 const handleAddList = (e) => {
                     e.preventDefault();
                     if (!newListTitle) return;
-                    setKanbanLists([...kanbanLists, { id: generateId('l'), title: newListTitle }]);
+                    dbSaveKanbanList({ id: generateId('l'), title: newListTitle });
                     setNewListTitle('');
                 };
 
                 const handleDeleteList = (listId) => {
-                    setKanbanLists(kanbanLists.filter(l => l.id !== listId));
-                    setTasks(tasks.filter(t => t.listId !== listId));
+                    dbDeleteKanbanList(listId);
                     setActiveDropdownList(null);
                 };
 
                 const handleAddTask = (e, listId) => {
                     e.preventDefault();
                     if (!newTask.title) return;
-                    setTasks([...tasks, { id: generateId('t'), title: newTask.title, listId: listId, projectId: newTask.projectId || projects[0]?.id || '', description: '', attachments: [] }]);
+                    dbSaveTask({ id: generateId('t'), title: newTask.title, listId: listId, projectId: newTask.projectId || projects[0]?.id || '', description: '', attachments: [] });
                     setNewTask({ title: '', listId: '', projectId: '', description: '' });
                 };
 
-                const moveTask = (taskId, targetListId) => {
-                    setTasks(tasks.map(t => t.id === taskId ? { ...t, listId: targetListId } : t));
+                const moveTask = (task, targetListId) => {
+                    dbSaveTask({ ...task, listId: targetListId });
                 };
 
                 const deleteTask = (taskId) => {
-                    setTasks(tasks.filter(t => t.id !== taskId));
+                    dbDeleteTask(taskId);
                 };
 
                 return (
@@ -757,7 +941,7 @@
                                                 <div key={task.id} onClick={() => setTaskDetailsModal(task)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">{getProjectName(task.projectId)}</span>
-                                                        <select onClick={(e) => e.stopPropagation()} onChange={(e) => moveTask(task.id, e.target.value)} value={task.listId} className="text-[10px] bg-gray-100 border border-gray-200 rounded p-1 outline-none text-gray-600">
+                                                        <select onClick={(e) => e.stopPropagation()} onChange={(e) => moveTask(task, e.target.value)} value={task.listId} className="text-[10px] bg-gray-100 border border-gray-200 rounded p-1 outline-none text-gray-600">
                                                             {kanbanLists.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
                                                         </select>
                                                     </div>
@@ -799,7 +983,7 @@
                 const [newLink, setNewLink] = useState('');
 
                 const handleUpdateTask = () => {
-                    setTasks(tasks.map(t => t.id === currentTask.id ? currentTask : t));
+                    dbSaveTask(currentTask);
                     setTaskDetailsModal(null);
                 };
 
@@ -863,7 +1047,7 @@
                                 </div>
                             </div>
                             <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                                <button onClick={() => { setTasks(tasks.filter(t => t.id !== currentTask.id)); setTaskDetailsModal(null); }} className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-sm font-semibold flex items-center">
+                                <button onClick={() => { dbDeleteTask(currentTask.id); setTaskDetailsModal(null); }} className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-sm font-semibold flex items-center">
                                     <Icon name="trash-2" className="w-4 h-4 mr-1.5" /> Excluir Cartão
                                 </button>
                                 <div className="flex space-x-3">
