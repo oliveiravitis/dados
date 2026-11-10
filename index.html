@@ -21,34 +21,36 @@
 <body class="bg-gray-100 overflow-hidden">
     <div id="root"></div>
 
-    <!-- Firebase SDKs via CDN -->
+    <!-- Script para carregar o Firebase dinamicamente se configurado -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, getDocs, setDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Configuração do Firebase da Oliveira Vitis
-        const firebaseConfig = {
-            apiKey: "AIzaSyC1h8TG5MD77p49L72rvY7gLmZ05Kdukv0",
-            authDomain: "oliveira-vitis-db.firebaseapp.com",
-            projectId: "oliveira-vitis-db",
-            storageBucket: "oliveira-vitis-db.firebasestorage.app",
-            messagingSenderId: "888823209400",
-            appId: "1:888823209400:web:9a748258662c025dacc34d",
-            measurementId: "G-04F0WR5CWQ"
+        window.initFirebaseWithConfig = (configObj) => {
+            try {
+                const app = initializeApp(configObj);
+                const db = getFirestore(app);
+                window.firebaseDB = { db, collection, getDocs, setDoc, doc, deleteDoc };
+                window.dispatchEvent(new Event('firebase-ready'));
+                return true;
+            } catch (err) {
+                console.error("Erro ao inicializar Firebase:", err);
+                return false;
+            }
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        // Disponibiliza globalmente para o React interagir com o Firestore
-        window.firebaseDB = { db, collection, getDocs, setDoc, doc, deleteDoc };
-        window.dispatchEvent(new Event('firebase-ready'));
+        // Verifica se já existe config salva no navegador
+        const savedCfg = localStorage.getItem('ov_firebase_cfg');
+        if (savedCfg) {
+            try {
+                window.initFirebaseWithConfig(JSON.parse(savedCfg));
+            } catch (e) {}
+        }
     </script>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // Componente de Ícone do Lucide (Compatibilidade)
         const Icon = ({ name, className = "w-5 h-5", ...props }) => {
             const iconRef = useRef(null);
             useEffect(() => {
@@ -62,8 +64,8 @@
         };
 
         function App() {
-            // States principais
             const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('ov_auth') === 'true');
+            const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('ov_dark') === 'true');
             const [clients, setClients] = useState([]);
             const [projects, setProjects] = useState([]);
             const [timelineItems, setTimelineItems] = useState([]);
@@ -75,20 +77,20 @@
             const [tasks, setTasks] = useState([]);
             const [isSyncing, setIsSyncing] = useState(false);
 
-            // Navigation & UI States
             const [activeTab, setActiveTab] = useState('clientes');
             const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
             
-            // Modal States
             const [timelineModalProject, setTimelineModalProject] = useState(null);
             const [taskDetailsModal, setTaskDetailsModal] = useState(null);
 
-            // Auth State
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [loginError, setLoginError] = useState('');
 
-            // Carregar dados do Firebase ao iniciar
+            // Estado para configurar o Firebase de forma segura
+            const [showConfigModal, setShowConfigModal] = useState(false);
+            const [firebaseJsonInput, setFirebaseJsonInput] = useState('');
+
             useEffect(() => {
                 const loadCloudData = async () => {
                     if (!window.firebaseDB) return;
@@ -96,27 +98,22 @@
                     try {
                         const { db, collection, getDocs } = window.firebaseDB;
                         
-                        // Carregar Clientes
                         const clientsSnap = await getDocs(collection(db, "clients"));
                         if (!clientsSnap.empty) {
                             setClients(clientsSnap.docs.map(d => d.data()));
                         }
-                        // Carregar Projetos
                         const projSnap = await getDocs(collection(db, "projects"));
                         if (!projSnap.empty) {
                             setProjects(projSnap.docs.map(d => d.data()));
                         }
-                        // Carregar Timeline
                         const timeSnap = await getDocs(collection(db, "timeline"));
                         if (!timeSnap.empty) {
                             setTimelineItems(timeSnap.docs.map(d => d.data()));
                         }
-                        // Carregar Listas Kanban
                         const listsSnap = await getDocs(collection(db, "kanbanLists"));
                         if (!listsSnap.empty) {
                             setKanbanLists(listsSnap.docs.map(d => d.data()));
                         }
-                        // Carregar Tarefas
                         const tasksSnap = await getDocs(collection(db, "tasks"));
                         if (!tasksSnap.empty) {
                             setTasks(tasksSnap.docs.map(d => d.data()));
@@ -133,7 +130,6 @@
                 return () => window.removeEventListener('firebase-ready', loadCloudData);
             }, []);
 
-            // Função genérica para salvar dados na nuvem automaticamente
             const saveToCloud = async (collectionName, id, data) => {
                 if (!window.firebaseDB) return;
                 try {
@@ -152,6 +148,12 @@
                 } catch (e) {
                     console.error("Erro ao remover da nuvem:", e);
                 }
+            };
+
+            const toggleDarkMode = () => {
+                const newMode = !isDarkMode;
+                setIsDarkMode(newMode);
+                localStorage.setItem('ov_dark', newMode ? 'true' : 'false');
             };
 
             const handleLogin = (e) => {
@@ -175,6 +177,24 @@
                 setLoginPassword('');
             };
 
+            const handleSaveFirebaseConfig = (e) => {
+                e.preventDefault();
+                try {
+                    // Tenta extrair ou converter o JSON inserido
+                    let cfg = JSON.parse(firebaseJsonInput);
+                    localStorage.setItem('ov_firebase_cfg', JSON.stringify(cfg));
+                    if (window.initFirebaseWithConfig(cfg)) {
+                        alert('Firebase configurado e conectado com sucesso!');
+                        setShowConfigModal(false);
+                        window.location.reload();
+                    } else {
+                        alert('Erro ao inicializar Firebase com este objeto.');
+                    }
+                } catch (err) {
+                    alert('JSON inválido. Certifique-se de colar o objeto firebaseConfig corretamente.');
+                }
+            };
+
             const generateId = (prefix) => `${prefix}${Math.random().toString(36).substr(2, 9)}`;
             const getClientName = (clientId) => clients.find(c => c.id === clientId)?.company || 'Desconhecido';
             const getProjectName = (projectId) => projects.find(p => p.id === projectId)?.title || 'Desconhecido';
@@ -185,7 +205,7 @@
 
             // --- COMPONENTE: SIDEBAR ---
             const Sidebar = () => (
-                <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#08194c] text-white transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 flex flex-col shadow-xl flex-shrink-0`}>
+                <div className={`fixed inset-y-0 left-0 z-40 w-64 ${isDarkMode ? 'bg-[#050e29] border-r border-blue-950' : 'bg-[#08194c]'} text-white transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 flex flex-col shadow-xl flex-shrink-0`}>
                     <div className="flex items-center justify-between p-6 border-b border-blue-950/50">
                         <div className="flex items-center space-x-3">
                             <Icon name="layout-dashboard" className="w-8 h-8 text-blue-300" />
@@ -199,23 +219,35 @@
                         {[
                             { id: 'clientes', label: 'Clientes', icon: 'users' },
                             { id: 'projetos', label: 'Projetos', icon: 'briefcase' },
-                            { id: 'kanban', label: 'Quadro Kanban', icon: 'trello' }
+                            { id: 'kanban', label: 'Quadro Kanban', icon: 'kanban' }
                         ].map((item) => (
                             <button
                                 key={item.id}
                                 onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
-                                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === item.id ? 'bg-white text-[#08194c] shadow-md font-semibold' : 'text-blue-100 hover:bg-white/10 hover:text-white'}`}
+                                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === item.id ? (isDarkMode ? 'bg-blue-600 text-white shadow-md font-semibold' : 'bg-white text-[#08194c] shadow-md font-semibold') : 'text-blue-100 hover:bg-white/10 hover:text-white'}`}
                             >
-                                <Icon name={item.icon} className={`w-5 h-5 ${activeTab === item.id ? 'text-[#08194c]' : 'text-blue-300'}`} />
+                                <Icon name={item.icon} className={`w-5 h-5 ${activeTab === item.id ? (isDarkMode ? 'text-white' : 'text-[#08194c]') : 'text-blue-300'}`} />
                                 <span>{item.label}</span>
                             </button>
                         ))}
                     </nav>
 
-                    <div className="p-4 border-t border-blue-950/50">
-                        <div className="flex items-center space-x-2 text-xs text-blue-300 mb-3 px-2">
-                            <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-yellow-400 animate-ping' : 'bg-emerald-400'}`}></span>
-                            <span>{isSyncing ? 'Sincronizando nuvem...' : 'Salvamento em Nuvem Ativo'}</span>
+                    <div className="p-4 border-t border-blue-950/50 space-y-3">
+                        <button onClick={toggleDarkMode} className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-blue-100 transition-colors text-sm font-medium">
+                            <span className="flex items-center space-x-2">
+                                <Icon name={isDarkMode ? "sun" : "moon"} className="w-4 h-4 text-yellow-300" />
+                                <span>{isDarkMode ? 'Modo Claro' : 'Modo Escuro'}</span>
+                            </span>
+                        </button>
+
+                        <button onClick={() => setShowConfigModal(true)} className="w-full flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-200 transition-colors text-sm font-medium">
+                            <Icon name="database" className="w-4 h-4" />
+                            <span>Configurar Nuvem</span>
+                        </button>
+
+                        <div className="flex items-center space-x-2 text-xs text-blue-300 px-2">
+                            <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-yellow-400 animate-ping' : (window.firebaseDB ? 'bg-emerald-400' : 'bg-gray-400')}`}></span>
+                            <span>{isSyncing ? 'Sincronizando...' : (window.firebaseDB ? 'Nuvem Conectada' : 'Modo Local')}</span>
                         </div>
                         <button onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white transition-colors text-sm font-medium">
                             <Icon name="log-out" className="w-4 h-4" />
@@ -282,21 +314,21 @@
 
                 return (
                     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300 w-full pb-10">
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            <h2 className="text-2xl font-bold text-[#08194c] mb-6 flex items-center">
+                        <div className={`${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-100 text-gray-800'} p-6 rounded-2xl shadow-sm border`}>
+                            <h2 className={`text-2xl font-bold mb-6 flex items-center ${isDarkMode ? 'text-white' : 'text-[#08194c]'}`}>
                                 <Icon name="users" className="w-6 h-6 mr-3 text-blue-500" /> Novo Cliente
                             </h2>
                             <form onSubmit={handleAddClient} className="flex flex-col gap-4">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <input type="text" placeholder="Nome do Responsável" required className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newClient.name} onChange={(e) => setNewClient({ ...newClient, name: e.target.value })} />
-                                    <input type="text" placeholder="Empresa" required className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newClient.company} onChange={(e) => setNewClient({ ...newClient, company: e.target.value })} />
-                                    <input type="text" placeholder="WhatsApp ou Email" required className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newClient.contact} onChange={(e) => setNewClient({ ...newClient, contact: e.target.value })} />
+                                    <input type="text" placeholder="Nome do Responsável" required className={`w-full p-3 border rounded-xl outline-none text-sm md:text-base ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`} value={newClient.name} onChange={(e) => setNewClient({ ...newClient, name: e.target.value })} />
+                                    <input type="text" placeholder="Empresa" required className={`w-full p-3 border rounded-xl outline-none text-sm md:text-base ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`} value={newClient.company} onChange={(e) => setNewClient({ ...newClient, company: e.target.value })} />
+                                    <input type="text" placeholder="WhatsApp ou Email" required className={`w-full p-3 border rounded-xl outline-none text-sm md:text-base ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`} value={newClient.contact} onChange={(e) => setNewClient({ ...newClient, contact: e.target.value })} />
                                 </div>
                                 
-                                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                                <div className={`flex flex-col md:flex-row items-start md:items-center gap-4 p-4 rounded-xl border ${isDarkMode ? 'bg-slate-900/40 border-slate-700' : 'bg-gray-50/50 border-gray-100'}`}>
                                     <div className="w-full md:w-auto">
-                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Plano Atual</span>
-                                        <select className="w-full p-2.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#08194c] text-sm bg-white" value={newClient.plan} onChange={(e) => setNewClient({...newClient, plan: e.target.value})}>
+                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">Plano Atual</span>
+                                        <select className={`w-full p-2.5 border rounded-lg outline-none text-sm ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`} value={newClient.plan} onChange={(e) => setNewClient({...newClient, plan: e.target.value})}>
                                             <option value="Plano Básico">Plano Básico</option>
                                             <option value="Plano Pro">Plano Pro</option>
                                             <option value="Plano Enterprise">Plano Enterprise</option>
@@ -304,19 +336,19 @@
                                         </select>
                                     </div>
                                     <div className="w-full md:w-auto flex flex-col md:flex-row md:items-center gap-4">
-                                        <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer mt-1 md:mt-5">
-                                            <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-[#08194c] focus:ring-[#08194c]" checked={newClient.isFreeTrial} onChange={(e) => setNewClient({...newClient, isFreeTrial: e.target.checked})} />
+                                        <label className={`flex items-center space-x-2 text-sm cursor-pointer mt-1 md:mt-5 ${isDarkMode ? 'text-slate-200' : 'text-gray-700'}`}>
+                                            <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-blue-600" checked={newClient.isFreeTrial} onChange={(e) => setNewClient({...newClient, isFreeTrial: e.target.checked})} />
                                             <span className="font-medium">Em Free Trial?</span>
                                         </label>
                                         {newClient.isFreeTrial && (
                                             <div className="w-full md:w-auto">
-                                                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Duração</span>
-                                                <input type="text" placeholder="Ex: 14 dias..." className="w-full p-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#08194c] text-sm" value={newClient.trialDuration} onChange={(e) => setNewClient({...newClient, trialDuration: e.target.value})} />
+                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">Duração</span>
+                                                <input type="text" placeholder="Ex: 14 dias..." className={`w-full p-2 border rounded-lg outline-none text-sm ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`} value={newClient.trialDuration} onChange={(e) => setNewClient({...newClient, trialDuration: e.target.value})} />
                                             </div>
                                         )}
                                     </div>
                                     <div className="ml-auto mt-2 md:mt-0 w-full md:w-auto flex">
-                                        <button type="submit" className="w-full md:w-auto bg-[#08194c] hover:bg-blue-900 text-white px-6 py-2.5 rounded-xl transition-colors shadow-md flex items-center justify-center font-semibold text-sm">
+                                        <button type="submit" className={`w-full md:w-auto px-6 py-2.5 rounded-xl transition-colors shadow-md flex items-center justify-center font-semibold text-sm ${isDarkMode ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#08194c] hover:bg-blue-900 text-white'}`}>
                                             <Icon name="plus" className="w-5 h-5 mr-1" /> Adicionar Cliente
                                         </button>
                                     </div>
@@ -324,16 +356,16 @@
                             </form>
                         </div>
 
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                            <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex flex-col gap-4">
+                        <div className={`${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-100 text-gray-800'} rounded-2xl shadow-sm border overflow-hidden`}>
+                            <div className={`p-6 border-b flex flex-col gap-4 ${isDarkMode ? 'border-slate-700 bg-slate-800/80' : 'border-gray-100 bg-gray-50/50'}`}>
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <h3 className="text-xl font-bold text-gray-800">Clientes Cadastrados</h3>
+                                    <h3 className="text-xl font-bold">Clientes Cadastrados</h3>
                                     <div className="relative">
                                         <Icon name="search" className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" />
                                         <input 
                                             type="text" 
                                             placeholder="Pesquisar cliente..." 
-                                            className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none w-full md:w-64 text-sm bg-white"
+                                            className={`pl-10 pr-4 py-2 border rounded-xl outline-none w-full md:w-64 text-sm ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`}
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
                                         />
@@ -342,7 +374,7 @@
                                 
                                 <div className="flex flex-col md:flex-row gap-3">
                                     <select 
-                                        className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#08194c] bg-white w-full md:w-auto"
+                                        className={`p-2 border rounded-lg text-sm outline-none w-full md:w-auto ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
                                         value={filterPlan}
                                         onChange={(e) => setFilterPlan(e.target.value)}
                                     >
@@ -353,7 +385,7 @@
                                         <option value="Personalizado">Personalizado</option>
                                     </select>
                                     <select 
-                                        className="p-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#08194c] bg-white w-full md:w-auto"
+                                        className={`p-2 border rounded-lg text-sm outline-none w-full md:w-auto ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
                                         value={filterTrial}
                                         onChange={(e) => setFilterTrial(e.target.value)}
                                     >
@@ -363,27 +395,27 @@
                                     </select>
                                 </div>
                             </div>
-                            <div className="divide-y divide-gray-100">
+                            <div className={`divide-y ${isDarkMode ? 'divide-slate-700' : 'divide-gray-100'}`}>
                                 {filteredClients.length === 0 ? (
-                                    <p className="p-8 text-center text-gray-500">Nenhum cliente encontrado.</p>
+                                    <p className="p-8 text-center text-gray-400">Nenhum cliente encontrado.</p>
                                 ) : (
                                     filteredClients.map(client => {
                                         const wppLink = formatWhatsApp(client.contact);
                                         return (
-                                            <div key={client.id} onClick={() => handleClientClick(client)} className="p-6 flex flex-col md:flex-row md:items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer relative group">
+                                            <div key={client.id} onClick={() => handleClientClick(client)} className={`p-6 flex flex-col md:flex-row md:items-center justify-between transition-colors cursor-pointer relative group ${isDarkMode ? 'hover:bg-slate-700/50' : 'hover:bg-gray-50'}`}>
                                                 <div className="flex-1 pr-4">
-                                                    <h4 className="font-bold text-lg text-[#08194c] flex items-center">
+                                                    <h4 className={`font-bold text-lg flex items-center ${isDarkMode ? 'text-white' : 'text-[#08194c]'}`}>
                                                         <Icon name="building-2" className="w-4 h-4 mr-2 text-gray-400" /> {client.company}
                                                     </h4>
-                                                    <p className="text-gray-600 mt-1 flex items-center">
+                                                    <p className={`mt-1 flex items-center ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
                                                         <Icon name="users" className="w-4 h-4 mr-2 text-gray-400" /> {client.name}
                                                     </p>
                                                     <div className="flex flex-wrap items-center gap-2 mt-3">
-                                                        <span className="text-xs font-semibold px-2.5 py-1 rounded bg-blue-50 text-[#08194c] border border-blue-100">
+                                                        <span className={`text-xs font-semibold px-2.5 py-1 rounded border ${isDarkMode ? 'bg-blue-900/40 text-blue-200 border-blue-800' : 'bg-blue-50 text-[#08194c] border-blue-100'}`}>
                                                             {client.plan || 'Plano Básico'}
                                                         </span>
                                                         {client.isFreeTrial && (
-                                                            <span className="text-xs font-semibold px-2.5 py-1 rounded bg-orange-50 text-orange-600 border border-orange-200">
+                                                            <span className={`text-xs font-semibold px-2.5 py-1 rounded border ${isDarkMode ? 'bg-orange-950/40 text-orange-300 border-orange-900' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
                                                                 Free Trial: {client.trialDuration || 'Não especificado'}
                                                             </span>
                                                         )}
@@ -391,30 +423,29 @@
                                                 </div>
                                                 <div className="mt-4 md:mt-0 flex items-center space-x-3">
                                                     {wppLink ? (
-                                                        <a href={wppLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-sm bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 px-4 py-2 rounded-full font-medium inline-flex items-center w-max transition-colors">
+                                                        <a href={wppLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className={`text-sm px-4 py-2 rounded-full font-medium inline-flex items-center w-max transition-colors ${isDarkMode ? 'bg-green-950/60 text-green-300 hover:bg-green-900' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
                                                             <Icon name="message-circle" className="w-4 h-4 mr-2" /> {client.contact}
                                                         </a>
                                                     ) : (
-                                                        <span className="text-sm bg-blue-50 text-blue-800 px-4 py-2 rounded-full font-medium inline-flex items-center w-max">
+                                                        <span className={`text-sm px-4 py-2 rounded-full font-medium inline-flex items-center w-max ${isDarkMode ? 'bg-blue-950/60 text-blue-300' : 'bg-blue-50 text-blue-800'}`}>
                                                             <Icon name="phone" className="w-4 h-4 mr-2" /> {client.contact}
                                                         </span>
                                                     )}
                                                     
-                                                    {/* Menu 3 Pontos */}
                                                     <div className="relative">
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === client.id ? null : client.id); }} 
-                                                            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors"
+                                                            className={`p-2 rounded-full transition-colors ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-200'}`}
                                                         >
                                                             <Icon name="more-vertical" className="w-5 h-5" />
                                                         </button>
                                                         {activeDropdown === client.id && (
                                                             <>
                                                                 <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
-                                                                <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 z-20 overflow-hidden">
+                                                                <div className={`absolute right-0 mt-2 w-36 rounded-xl shadow-lg border z-20 overflow-hidden ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-gray-100'}`}>
                                                                     <button 
                                                                         onClick={(e) => handleDeleteClient(e, client.id)}
-                                                                        className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center transition-colors font-medium"
+                                                                        className={`w-full text-left px-4 py-3 text-sm flex items-center transition-colors font-medium ${isDarkMode ? 'text-red-300 hover:bg-slate-600' : 'text-red-600 hover:bg-red-50'}`}
                                                                     >
                                                                         <Icon name="trash-2" className="w-4 h-4 mr-2" /> Deletar
                                                                     </button>
@@ -462,9 +493,9 @@
 
                 return (
                     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300 w-full pb-10">
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-6">
+                        <div className={`${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-100 text-gray-800'} p-6 rounded-2xl shadow-sm border flex flex-col gap-6`}>
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <h2 className="text-2xl font-bold text-[#08194c] flex items-center">
+                                <h2 className={`text-2xl font-bold flex items-center ${isDarkMode ? 'text-white' : 'text-[#08194c]'}`}>
                                     <Icon name="briefcase" className="w-6 h-6 mr-3 text-blue-500" /> Projetos
                                 </h2>
                                 <div className="relative">
@@ -472,64 +503,63 @@
                                     <input 
                                         type="text" 
                                         placeholder="Pesquisar projeto..." 
-                                        className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none w-full md:w-64 text-sm"
+                                        className={`pl-10 pr-4 py-2 border rounded-xl outline-none w-full md:w-64 text-sm ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`}
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                     />
                                 </div>
                             </div>
 
-                            <div className="pt-4 border-t border-gray-100">
-                                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Novo Projeto</h3>
+                            <div className={`pt-4 border-t ${isDarkMode ? 'border-slate-700' : 'border-gray-100'}`}>
+                                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Novo Projeto</h3>
                                 <form onSubmit={handleAddProject} className="flex flex-col md:flex-row gap-4">
-                                    <input type="text" placeholder="Nome do Projeto" required className="flex-1 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none text-sm md:text-base" value={newProject.title} onChange={(e) => setNewProject({ ...newProject, title: e.target.value })} />
-                                    <select required className="flex-1 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#08194c] outline-none bg-white text-sm md:text-base" value={newProject.clientId} onChange={(e) => setNewProject({ ...newProject, clientId: e.target.value })}>
-                                        <option value="" disabled>Vincular a um Cliente...</option>
-                                        {clients.map(c => <option key={c.id} value={c.id}>{c.company} ({c.name})</option>)}
+                                    <input type="text" placeholder="Nome do Projeto" required className={`flex-1 p-3 border rounded-xl outline-none text-sm md:text-base ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`} value={newProject.title} onChange={(e) => setNewProject({ ...newProject, title: e.target.value })} />
+                                    <select required className={`flex-1 p-3 border rounded-xl outline-none text-sm md:text-base ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`} value={newProject.clientId} onChange={(e) => setNewProject({ ...newProject, clientId: e.target.value })}>
+                                        <option value="" disabled className={isDarkMode ? 'bg-slate-700 text-slate-400' : ''}>Vincular a um Cliente...</option>
+                                        {clients.map(c => <option key={c.id} value={c.id} className={isDarkMode ? 'bg-slate-700 text-white' : ''}>{c.company} ({c.name})</option>)}
                                     </select>
-                                    <button type="submit" className="bg-[#08194c] hover:bg-blue-900 text-white px-6 py-3 rounded-xl transition-colors shadow-md font-semibold">Criar Projeto</button>
+                                    <button type="submit" className={`px-6 py-3 rounded-xl transition-colors shadow-md font-semibold ${isDarkMode ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#08194c] hover:bg-blue-900 text-white'}`}>Criar Projeto</button>
                                 </form>
                             </div>
                         </div>
 
                         {filteredProjects.length === 0 ? (
-                            <p className="p-8 text-center text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">Nenhum projeto encontrado.</p>
+                            <p className={`p-8 text-center rounded-2xl shadow-sm border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-white border-gray-100 text-gray-500'}`}>Nenhum projeto encontrado.</p>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {filteredProjects.map(project => (
                                     <div 
                                         key={project.id} 
                                         onClick={() => setTimelineModalProject(project)}
-                                        className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer relative overflow-hidden group"
+                                        className={`${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500 text-white' : 'bg-white border-gray-100 hover:border-blue-200 text-gray-800'} p-6 rounded-2xl shadow-sm border hover:shadow-lg transition-all cursor-pointer relative overflow-hidden group`}
                                     >
-                                        <div className="absolute top-0 left-0 w-2 h-full bg-[#08194c] rounded-l-2xl"></div>
+                                        <div className="absolute top-0 left-0 w-2 h-full bg-blue-600 rounded-l-2xl"></div>
                                         <div className="flex justify-between items-start">
                                             <div className="ml-4">
-                                                <h4 className="font-bold text-xl text-gray-800 mb-2">{project.title}</h4>
-                                                <p className="text-gray-500 flex items-center text-sm">
+                                                <h4 className="font-bold text-xl mb-2">{project.title}</h4>
+                                                <p className={`flex items-center text-sm ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}>
                                                     <Icon name="building-2" className="w-4 h-4 mr-2" />
-                                                    Cliente: <span className="font-semibold text-[#08194c] ml-1">{getClientName(project.clientId)}</span>
+                                                    Cliente: <span className={`font-semibold ml-1 ${isDarkMode ? 'text-blue-400' : 'text-[#08194c]'}`}>{getClientName(project.clientId)}</span>
                                                 </p>
-                                                <div className="mt-4 inline-flex items-center text-sm text-blue-600 font-medium bg-blue-50 px-3 py-1.5 rounded-lg">
+                                                <div className={`mt-4 inline-flex items-center text-sm font-medium px-3 py-1.5 rounded-lg ${isDarkMode ? 'bg-blue-950 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
                                                     <Icon name="calendar" className="w-4 h-4 mr-2" /> Abrir Timeline / Cronograma
                                                 </div>
                                             </div>
                                             
-                                            {/* Menu 3 Pontos */}
                                             <div className="relative ml-2">
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === project.id ? null : project.id); }} 
-                                                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                                                    className={`p-1.5 rounded-full transition-colors ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
                                                 >
                                                     <Icon name="more-vertical" className="w-5 h-5" />
                                                 </button>
                                                 {activeDropdown === project.id && (
                                                     <>
                                                         <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }}></div>
-                                                        <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 z-20 overflow-hidden">
+                                                        <div className={`absolute right-0 mt-2 w-36 rounded-xl shadow-lg border z-20 overflow-hidden ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-gray-100'}`}>
                                                             <button 
                                                                 onClick={(e) => handleDeleteProject(e, project.id)}
-                                                                className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center transition-colors font-medium"
+                                                                className={`w-full text-left px-4 py-3 text-sm flex items-center transition-colors font-medium ${isDarkMode ? 'text-red-300 hover:bg-slate-600' : 'text-red-600 hover:bg-red-50'}`}
                                                             >
                                                                 <Icon name="trash-2" className="w-4 h-4 mr-2" /> Deletar
                                                             </button>
@@ -610,8 +640,8 @@
                 const currentDayNumber = todayDate.getDate();
 
                 return (
-                    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex flex-col animate-in fade-in duration-200">
-                        <div className="bg-[#08194c] text-white px-6 py-4 flex items-center justify-between shadow-md">
+                    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex flex-col animate-in fade-in duration-200">
+                        <div className={`px-6 py-4 flex items-center justify-between shadow-md ${isDarkMode ? 'bg-slate-900 border-b border-slate-800 text-white' : 'bg-[#08194c] text-white'}`}>
                             <div className="flex items-center space-x-3">
                                 <Icon name="maximize-2" className="w-6 h-6 text-blue-300" />
                                 <div>
@@ -624,54 +654,53 @@
                             </button>
                         </div>
 
-                        <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-gray-100">
-                            {/* Painel Esquerdo */}
-                            <div className="w-full md:w-96 bg-white border-r border-gray-200 p-6 flex flex-col shadow-sm overflow-y-auto">
-                                <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-                                    <Icon name="list-plus" className="w-5 h-5 mr-2 text-blue-600" /> Etapas do Projeto
+                        <div className={`flex-1 flex flex-col md:flex-row overflow-hidden ${isDarkMode ? 'bg-slate-950' : 'bg-gray-100'}`}>
+                            <div className={`w-full md:w-96 border-r p-6 flex flex-col shadow-sm overflow-y-auto ${isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-200'}`}>
+                                <h3 className="font-bold mb-4 flex items-center">
+                                    <Icon name="list-plus" className="w-5 h-5 mr-2 text-blue-500" /> Etapas do Projeto
                                 </h3>
 
-                                <form onSubmit={handleAddItem} className="space-y-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                                    <input type="text" placeholder="Nome da etapa..." required className="w-full p-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#08194c] bg-white" value={newItem.title} onChange={(e) => setNewItem({...newItem, title: e.target.value})} />
+                                <form onSubmit={handleAddItem} className={`space-y-3 mb-6 p-4 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                                    <input type="text" placeholder="Nome da etapa..." required className={`w-full p-2.5 border rounded-lg text-sm outline-none ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`} value={newItem.title} onChange={(e) => setNewItem({...newItem, title: e.target.value})} />
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <span className="text-[10px] uppercase font-bold text-gray-500">Início</span>
-                                            <input type="date" required className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none bg-white" value={newItem.startDate} onChange={(e) => setNewItem({...newItem, startDate: e.target.value})} />
+                                            <span className="text-[10px] uppercase font-bold text-gray-400">Início</span>
+                                            <input type="date" required className={`w-full p-2 border rounded-lg text-xs outline-none ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`} value={newItem.startDate} onChange={(e) => setNewItem({...newItem, startDate: e.target.value})} />
                                         </div>
                                         <div>
-                                            <span className="text-[10px] uppercase font-bold text-gray-500">Término</span>
-                                            <input type="date" required className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none bg-white" value={newItem.endDate} onChange={(e) => setNewItem({...newItem, endDate: e.target.value})} />
+                                            <span className="text-[10px] uppercase font-bold text-gray-400">Término</span>
+                                            <input type="date" required className={`w-full p-2 border rounded-lg text-xs outline-none ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`} value={newItem.endDate} onChange={(e) => setNewItem({...newItem, endDate: e.target.value})} />
                                         </div>
                                     </div>
-                                    <button type="submit" className="w-full bg-[#08194c] hover:bg-blue-900 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center">
+                                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center">
                                         <Icon name="plus" className="w-4 h-4 mr-1" /> Adicionar Etapa
                                     </button>
                                 </form>
 
                                 <div className="space-y-3 flex-1 overflow-y-auto">
                                     {projectItems.length === 0 ? (
-                                        <p className="text-gray-400 text-sm text-center py-6">Nenhuma etapa cadastrada neste projeto.</p>
+                                        <p className="text-gray-400 text-sm text-center py-6">Nenhuma etapa cadastrada.</p>
                                     ) : (
                                         projectItems.map(item => {
                                             const status = getDaysStatus(item.endDate);
                                             return (
-                                                <div key={item.id} className={`p-4 rounded-xl border transition-all ${item.completed ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-gray-200 shadow-sm'}`}>
+                                                <div key={item.id} className={`p-4 rounded-xl border transition-all ${item.completed ? (isDarkMode ? 'bg-emerald-950/30 border-emerald-900' : 'bg-emerald-50/50 border-emerald-200') : (isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200 shadow-sm')}`}>
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex items-start space-x-3">
-                                                            <button onClick={() => toggleComplete(item.id)} className="mt-0.5 text-blue-600 hover:text-blue-800 transition-colors">
-                                                                {item.completed ? <Icon name="check-circle-2" className="w-5 h-5 text-emerald-600 fill-emerald-100" /> : <Icon name="circle" className="w-5 h-5 text-gray-300" />}
+                                                            <button onClick={() => toggleComplete(item.id)} className="mt-0.5 text-blue-500 hover:text-blue-400 transition-colors">
+                                                                {item.completed ? <Icon name="check-circle-2" className="w-5 h-5 text-emerald-500" /> : <Icon name="circle" className="w-5 h-5 text-slate-500" />}
                                                             </button>
                                                             <div>
-                                                                <h4 className={`font-semibold text-sm ${item.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.title}</h4>
-                                                                <p className="text-xs text-gray-500 mt-1 flex items-center">
+                                                                <h4 className={`font-semibold text-sm ${item.completed ? 'line-through text-slate-500' : (isDarkMode ? 'text-white' : 'text-gray-800')}`}>{item.title}</h4>
+                                                                <p className="text-xs text-slate-400 mt-1 flex items-center">
                                                                     <Icon name="calendar" className="w-3.5 h-3.5 mr-1" /> {item.startDate} até {item.endDate}
                                                                 </p>
-                                                                <span className={`inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${item.completed ? 'bg-emerald-100 text-emerald-700' : status.color}`}>
+                                                                <span className={`inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${item.completed ? 'bg-emerald-900/50 text-emerald-300' : status.color}`}>
                                                                     {item.completed ? 'Concluído' : status.text}
                                                                 </span>
                                                             </div>
                                                         </div>
-                                                        <button onClick={() => deleteTimelineItem(item.id)} className="text-gray-300 hover:text-red-500 transition-colors">
+                                                        <button onClick={() => deleteTimelineItem(item.id)} className="text-slate-500 hover:text-red-400 transition-colors">
                                                             <Icon name="trash-2" className="w-4 h-4" />
                                                         </button>
                                                     </div>
@@ -682,22 +711,21 @@
                                 </div>
                             </div>
 
-                            {/* Painel Direito - Gráfico */}
-                            <div className="flex-1 p-6 overflow-x-auto flex flex-col bg-white">
+                            <div className={`flex-1 p-6 overflow-x-auto flex flex-col ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-gray-800'}`}>
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-bold text-gray-800 flex items-center">
-                                        <Icon name="calendar" className="w-5 h-5 mr-2 text-blue-600" /> Gráfico de Gantt (Timeline)
+                                    <h3 className="font-bold flex items-center">
+                                        <Icon name="calendar" className="w-5 h-5 mr-2 text-blue-500" /> Gráfico de Gantt (Timeline)
                                     </h3>
-                                    <div className="flex items-center space-x-3 text-xs text-gray-500">
+                                    <div className="flex items-center space-x-3 text-xs text-slate-400">
                                         <span className="flex items-center"><span className="w-3 h-3 bg-orange-500 inline-block rounded-full mr-1.5"></span> Linha de Hoje</span>
-                                        <span className="flex items-center"><span className="w-3 h-3 bg-blue-500 inline-block rounded-md mr-1.5"></span> Período da Tarefa</span>
+                                        <span className="flex items-center"><span className="w-3 h-3 bg-blue-500 inline-block rounded-md mr-1.5"></span> Período</span>
                                     </div>
                                 </div>
 
-                                <div className="flex-1 bg-gray-50 rounded-2xl border border-gray-200 p-4 overflow-x-auto relative min-w-[700px]">
-                                    <div className="grid grid-cols-12 gap-2 border-b border-gray-200 pb-3 mb-4 sticky top-0 bg-gray-50 z-10">
+                                <div className={`flex-1 rounded-2xl border p-4 overflow-x-auto relative min-w-[700px] ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-gray-50 border-gray-200'}`}>
+                                    <div className={`grid grid-cols-12 gap-2 border-b pb-3 mb-4 sticky top-0 z-10 ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-gray-200 bg-gray-50'}`}>
                                         {months.map((m, idx) => (
-                                            <div key={m.name} className={`text-center font-bold text-xs uppercase tracking-wider py-1 rounded ${idx === currentMonthIndex ? 'bg-blue-600 text-white shadow' : 'text-gray-600 bg-gray-200/60'}`}>
+                                            <div key={m.name} className={`text-center font-bold text-xs uppercase tracking-wider py-1 rounded ${idx === currentMonthIndex ? 'bg-blue-600 text-white shadow' : (isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-gray-600 bg-gray-200/60')}`}>
                                                 {m.name}
                                             </div>
                                         ))}
@@ -709,7 +737,7 @@
 
                                     <div className="space-y-4 pt-2 relative">
                                         {projectItems.length === 0 ? (
-                                            <div className="text-center py-20 text-gray-400 text-sm">Adicione etapas à esquerda para vê-las no gráfico.</div>
+                                            <div className="text-center py-20 text-slate-500 text-sm">Adicione etapas à esquerda.</div>
                                         ) : (
                                             projectItems.map((item) => {
                                                 const startD = new Date(item.startDate);
@@ -721,10 +749,10 @@
                                                 const widthPercent = Math.max(5, Math.min(100 - leftPercent, ((endDayOfYear - startDayOfYear) / 365) * 100));
 
                                                 return (
-                                                    <div key={item.id} className="relative h-14 bg-white rounded-xl border border-gray-200 flex items-center px-4 shadow-sm">
-                                                        <span className="w-48 truncate text-xs font-bold text-gray-700 mr-4">{item.title}</span>
-                                                        <div className="flex-1 relative h-6 bg-gray-100 rounded-lg">
-                                                            <div className={`absolute h-full rounded-lg flex items-center px-3 text-white text-xs font-medium shadow-sm transition-all ${item.completed ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`} style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}>
+                                                    <div key={item.id} className={`relative h-14 rounded-xl border flex items-center px-4 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
+                                                        <span className={`w-48 truncate text-xs font-bold mr-4 ${isDarkMode ? 'text-slate-200' : 'text-gray-700'}`}>{item.title}</span>
+                                                        <div className={`flex-1 relative h-6 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-gray-100'}`}>
+                                                            <div className={`absolute h-full rounded-lg flex items-center px-3 text-white text-xs font-medium shadow-sm transition-all ${item.completed ? 'bg-emerald-600' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`} style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}>
                                                                 <span className="truncate">{item.startDate} até {item.endDate}</span>
                                                             </div>
                                                         </div>
@@ -797,16 +825,16 @@
 
                 return (
                     <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-300 w-full">
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className={`${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-100 text-gray-800'} p-6 rounded-2xl shadow-sm border flex flex-col md:flex-row items-center justify-between gap-4`}>
                             <div>
-                                <h2 className="text-2xl font-bold text-[#08194c] flex items-center">
-                                    <Icon name="trello" className="w-6 h-6 mr-3 text-blue-500" /> Quadros Kanban
+                                <h2 className={`text-2xl font-bold flex items-center ${isDarkMode ? 'text-white' : 'text-[#08194c]'}`}>
+                                    <Icon name="kanban" className="w-6 h-6 mr-3 text-blue-500" /> Quadros Kanban
                                 </h2>
-                                <p className="text-sm text-gray-500 mt-1">Gerencie suas listas e cartões</p>
+                                <p className={`text-sm mt-1 ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>Gerencie suas listas e cartões</p>
                             </div>
                             <form onSubmit={handleAddList} className="flex gap-2 w-full md:w-auto">
-                                <input type="text" placeholder="Nome da nova lista..." className="p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c] flex-1 md:w-64" value={newListTitle} onChange={(e) => setNewListTitle(e.target.value)} />
-                                <button type="submit" className="bg-[#08194c] hover:bg-blue-900 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center shadow-md whitespace-nowrap">
+                                <input type="text" placeholder="Nome da nova lista..." className={`p-2.5 border rounded-xl text-sm outline-none flex-1 md:w-64 ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`} value={newListTitle} onChange={(e) => setNewListTitle(e.target.value)} />
+                                <button type="submit" className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center shadow-md whitespace-nowrap ${isDarkMode ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#08194c] hover:bg-blue-900 text-white'}`}>
                                     <Icon name="plus" className="w-4 h-4 mr-1" /> Criar Lista
                                 </button>
                             </form>
@@ -816,21 +844,21 @@
                             {kanbanLists.map(list => {
                                 const listTasks = tasks.filter(t => t.listId === list.id);
                                 return (
-                                    <div key={list.id} data-list-title={list.title} className="w-80 flex-shrink-0 bg-gray-50 rounded-2xl border border-gray-200/80 shadow-sm flex flex-col max-h-[calc(100vh-280px)]">
-                                        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white rounded-t-2xl">
+                                    <div key={list.id} data-list-title={list.title} className={`w-80 flex-shrink-0 rounded-2xl border shadow-sm flex flex-col max-h-[calc(100vh-280px)] ${isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-gray-50 border-gray-200/80'}`}>
+                                        <div className={`p-4 border-b flex items-center justify-between rounded-t-2xl ${isDarkMode ? 'border-slate-800 bg-slate-800/90' : 'border-gray-200 bg-white'}`}>
                                             <div className="flex items-center space-x-2">
-                                                <span className="font-bold text-gray-800">{list.title}</span>
-                                                <span className="text-xs bg-blue-50 text-blue-600 font-bold px-2 py-0.5 rounded-full">{listTasks.length}</span>
+                                                <span className="font-bold">{list.title}</span>
+                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-blue-950 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>{listTasks.length}</span>
                                             </div>
                                             <div className="relative">
-                                                <button onClick={() => setActiveDropdownList(activeDropdownList === list.id ? null : list.id)} className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
+                                                <button onClick={() => setActiveDropdownList(activeDropdownList === list.id ? null : list.id)} className={`p-1 rounded-full transition-colors ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
                                                     <Icon name="more-vertical" className="w-4 h-4" />
                                                 </button>
                                                 {activeDropdownList === list.id && (
                                                     <>
                                                         <div className="fixed inset-0 z-10" onClick={() => setActiveDropdownList(null)}></div>
-                                                        <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg border border-gray-100 z-20 overflow-hidden">
-                                                            <button onClick={() => handleDeleteList(list.id)} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center transition-colors font-medium">
+                                                        <div className={`absolute right-0 mt-2 w-36 rounded-xl shadow-lg border z-20 overflow-hidden ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-gray-100'}`}>
+                                                            <button onClick={() => handleDeleteList(list.id)} className={`w-full text-left px-4 py-3 text-sm flex items-center transition-colors font-medium ${isDarkMode ? 'text-red-300 hover:bg-slate-600' : 'text-red-600 hover:bg-red-50'}`}>
                                                                 <Icon name="trash-2" className="w-4 h-4 mr-2" /> Deletar Lista
                                                             </button>
                                                         </div>
@@ -841,20 +869,20 @@
 
                                         <div className="p-3 space-y-3 overflow-y-auto flex-1">
                                             {listTasks.map(task => (
-                                                <div key={task.id} onClick={() => setTaskDetailsModal(task)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer relative group">
+                                                <div key={task.id} onClick={() => setTaskDetailsModal(task)} className={`p-4 rounded-xl shadow-sm border transition-all cursor-pointer relative group ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500 text-white' : 'bg-white border-gray-200 hover:border-blue-300'}`}>
                                                     <div className="flex justify-between items-start mb-2">
-                                                        <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">{getProjectName(task.projectId)}</span>
-                                                        <select onClick={(e) => e.stopPropagation()} onChange={(e) => moveTask(task.id, e.target.value)} value={task.listId} className="text-[10px] bg-gray-100 border border-gray-200 rounded p-1 outline-none text-gray-600 font-medium">
+                                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${isDarkMode ? 'bg-indigo-950 text-indigo-300' : 'bg-indigo-50 text-indigo-700'}`}>{getProjectName(task.projectId)}</span>
+                                                        <select onClick={(e) => e.stopPropagation()} onChange={(e) => moveTask(task.id, e.target.value)} value={task.listId} className={`text-[10px] border rounded p-1 outline-none font-medium ${isDarkMode ? 'bg-slate-700 border-slate-600 text-slate-300' : 'bg-gray-100 border-gray-200 text-gray-600'}`}>
                                                             {kanbanLists.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
                                                         </select>
                                                     </div>
-                                                    <h4 className="font-semibold text-gray-800 text-sm mb-2">{task.title}</h4>
-                                                    {task.description && <p className="text-xs text-gray-500 line-clamp-2 mb-2">{task.description}</p>}
-                                                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs text-gray-400">
+                                                    <h4 className="font-semibold text-sm mb-2">{task.title}</h4>
+                                                    {task.description && <p className={`text-xs line-clamp-2 mb-2 ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>{task.description}</p>}
+                                                    <div className={`flex items-center justify-between pt-2 border-t text-xs ${isDarkMode ? 'border-slate-700 text-slate-500' : 'border-gray-100 text-gray-400'}`}>
                                                         <div className="flex items-center space-x-2">
-                                                            {task.attachments && task.attachments.length > 0 && <span className="flex items-center text-blue-600"><Icon name="paperclip" className="w-3 h-3 mr-1" /> {task.attachments.length}</span>}
+                                                            {task.attachments && task.attachments.length > 0 && <span className="flex items-center text-blue-400"><Icon name="paperclip" className="w-3 h-3 mr-1" /> {task.attachments.length}</span>}
                                                         </div>
-                                                        <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="hover:text-red-500 transition-colors">
+                                                        <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="hover:text-red-400 transition-colors">
                                                             <Icon name="trash-2" className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
@@ -862,10 +890,10 @@
                                             ))}
                                         </div>
 
-                                        <div className="p-3 bg-white border-t border-gray-200 rounded-b-2xl">
+                                        <div className={`p-3 border-t rounded-b-2xl ${isDarkMode ? 'border-slate-800 bg-slate-800/90' : 'border-gray-200 bg-white'}`}>
                                             <form onSubmit={(e) => handleAddTask(e, list.id)} className="space-y-2">
-                                                <input type="text" placeholder="Novo cartão..." className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#08194c]" value={newTask.listId === list.id ? newTask.title : ''} onChange={(e) => setNewTask({ title: e.target.value, listId: list.id, projectId: projects[0]?.id || '' })} />
-                                                <button type="submit" className="w-full bg-gray-100 hover:bg-[#08194c] hover:text-white text-gray-700 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center">
+                                                <input type="text" placeholder="Novo cartão..." className={`w-full p-2 border rounded-lg text-xs outline-none ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-200'}`} value={newTask.listId === list.id ? newTask.title : ''} onChange={(e) => setNewTask({ title: e.target.value, listId: list.id, projectId: projects[0]?.id || '' })} />
+                                                <button type="submit" className={`w-full py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center ${isDarkMode ? 'bg-slate-700 hover:bg-blue-600 text-white' : 'bg-gray-100 hover:bg-[#08194c] hover:text-white text-gray-700'}`}>
                                                     <Icon name="plus" className="w-3.5 h-3.5 mr-1" /> Adicionar Cartão
                                                 </button>
                                             </form>
@@ -919,54 +947,54 @@
                 };
 
                 return (
-                    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
-                            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                                <h3 className="text-xl font-bold text-[#08194c] flex items-center">
-                                    <Icon name="trello" className="w-5 h-5 mr-2 text-blue-500" /> Detalhes do Cartão
+                    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                        <div className={`rounded-2xl shadow-xl border w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh] ${isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-100 text-gray-800'}`}>
+                            <div className={`p-6 border-b flex items-center justify-between ${isDarkMode ? 'border-slate-800 bg-slate-800/80' : 'border-gray-100 bg-gray-50/50'}`}>
+                                <h3 className={`text-xl font-bold flex items-center ${isDarkMode ? 'text-white' : 'text-[#08194c]'}`}>
+                                    <Icon name="kanban" className="w-5 h-5 mr-2 text-blue-500" /> Detalhes do Cartão
                                 </h3>
-                                <button onClick={() => setTaskDetailsModal(null)} className="text-gray-400 hover:text-gray-700">
+                                <button onClick={() => setTaskDetailsModal(null)} className="text-gray-400 hover:text-white">
                                     <Icon name="x" className="w-6 h-6" />
                                 </button>
                             </div>
                             <div className="p-6 space-y-6 overflow-y-auto flex-1">
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Título</label>
-                                    <input type="text" className="w-full p-3 border border-gray-200 rounded-xl font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-[#08194c]" value={currentTask.title} onChange={(e) => setCurrentTask({ ...currentTask, title: e.target.value })} />
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">Título</label>
+                                    <input type="text" className={`w-full p-3 border rounded-xl font-semibold outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-200'}`} value={currentTask.title} onChange={(e) => setCurrentTask({ ...currentTask, title: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1 flex items-center">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1 flex items-center">
                                         <Icon name="align-left" className="w-4 h-4 mr-1 text-blue-500" /> Descrição
                                     </label>
-                                    <textarea rows="4" placeholder="Adicione uma descrição detalhada..." className="w-full p-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]" value={currentTask.description} onChange={(e) => setCurrentTask({ ...currentTask, description: e.target.value })}></textarea>
+                                    <textarea rows="4" placeholder="Adicione uma descrição detalhada..." className={`w-full p-3 border rounded-xl text-sm outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-gray-200'}`} value={currentTask.description} onChange={(e) => setCurrentTask({ ...currentTask, description: e.target.value })}></textarea>
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2 flex items-center">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2 flex items-center">
                                         <Icon name="paperclip" className="w-4 h-4 mr-1 text-blue-500" /> Anexar Links
                                     </label>
                                     <form onSubmit={handleAddAttachment} className="flex gap-2 mb-3">
-                                        <input type="text" placeholder="Ex: wa.me/5511999999999..." className="flex-1 p-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#08194c]" value={newLink} onChange={(e) => setNewLink(e.target.value)} />
-                                        <button type="submit" className="bg-blue-50 hover:bg-blue-100 text-[#08194c] px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">Anexar</button>
+                                        <input type="text" placeholder="Ex: wa.me/5511999999999..." className={`flex-1 p-2.5 border rounded-xl text-sm outline-none ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-gray-200'}`} value={newLink} onChange={(e) => setNewLink(e.target.value)} />
+                                        <button type="submit" className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${isDarkMode ? 'bg-blue-950 text-blue-300 hover:bg-blue-900' : 'bg-blue-50 hover:bg-blue-100 text-[#08194c]'}`}>Anexar</button>
                                     </form>
                                     <div className="space-y-2">
                                         {currentTask.attachments && currentTask.attachments.map((link, idx) => (
-                                            <div key={idx} className="flex items-center justify-between bg-gray-50 p-2.5 rounded-xl border border-gray-200">
-                                                <a href={link} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline flex items-center truncate">
+                                            <div key={idx} className={`flex items-center justify-between p-2.5 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                                                <a href={link} target="_blank" rel="noreferrer" className="text-sm text-blue-400 hover:underline flex items-center truncate">
                                                     <Icon name="link" className="w-4 h-4 mr-2 flex-shrink-0" /> <span className="truncate">{link}</span>
                                                 </a>
-                                                <button onClick={() => removeAttachment(idx)} className="text-gray-400 hover:text-red-500 p-1"><Icon name="trash-2" className="w-4 h-4" /></button>
+                                                <button onClick={() => removeAttachment(idx)} className="text-gray-400 hover:text-red-400 p-1"><Icon name="trash-2" className="w-4 h-4" /></button>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
-                            <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                                <button onClick={handleDeleteCard} className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-sm font-semibold transition-colors flex items-center">
+                            <div className={`p-6 border-t flex items-center justify-between ${isDarkMode ? 'border-slate-800 bg-slate-800/80' : 'border-gray-100 bg-gray-50/50'}`}>
+                                <button onClick={handleDeleteCard} className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center ${isDarkMode ? 'bg-red-950/60 text-red-300 hover:bg-red-900' : 'bg-red-50 hover:bg-red-100 text-red-600'}`}>
                                     <Icon name="trash-2" className="w-4 h-4 mr-1.5" /> Excluir
                                 </button>
                                 <div className="flex space-x-3">
-                                    <button onClick={() => setTaskDetailsModal(null)} className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-semibold transition-colors">Cancelar</button>
-                                    <button onClick={handleUpdateTask} className="px-6 py-2.5 bg-[#08194c] hover:bg-blue-900 text-white rounded-xl text-sm font-semibold transition-colors shadow-md">Salvar</button>
+                                    <button onClick={() => setTaskDetailsModal(null)} className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>Cancelar</button>
+                                    <button onClick={handleUpdateTask} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-colors shadow-md">Salvar</button>
                                 </div>
                             </div>
                         </div>
@@ -975,7 +1003,30 @@
             };
 
             return (
-                <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
+                <div className={`flex h-screen font-sans overflow-hidden ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-gray-100 text-gray-800'}`}>
+                    {/* Modal para configurar credenciais de nuvem de forma privada */}
+                    {showConfigModal && (
+                        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white text-gray-800 rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg p-6">
+                                <h3 className="text-lg font-bold text-[#08194c] mb-2">Configurar Conexão com Firebase</h3>
+                                <p className="text-xs text-gray-500 mb-4">Cole abaixo o objeto javascript completo do seu firebaseConfig para habilitar a sincronização automática em nuvem de forma segura.</p>
+                                <form onSubmit={handleSaveFirebaseConfig} className="space-y-4">
+                                    <textarea 
+                                        rows="6" 
+                                        placeholder={`{\n  apiKey: "...",\n  authDomain: "...",\n  projectId: "...",\n  storageBucket: "...",\n  messagingSenderId: "...",\n  appId: "..."\n}`}
+                                        className="w-full p-3 border border-gray-200 rounded-xl font-mono text-xs outline-none focus:ring-2 focus:ring-[#08194c]"
+                                        value={firebaseJsonInput}
+                                        onChange={(e) => setFirebaseJsonInput(e.target.value)}
+                                    ></textarea>
+                                    <div className="flex justify-end space-x-3">
+                                        <button type="button" onClick={() => setShowConfigModal(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-semibold">Cancelar</button>
+                                        <button type="submit" className="px-5 py-2 bg-[#08194c] hover:bg-blue-900 text-white rounded-xl text-sm font-semibold">Salvar e Conectar</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
                     {!isAuthenticated ? (
                         <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-[#08194c] to-blue-950 p-4">
                             <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md p-8">
@@ -1000,19 +1051,24 @@
                                     </div>
                                     <button type="submit" className="w-full bg-[#08194c] hover:bg-blue-900 text-white py-3 rounded-xl font-semibold shadow-lg mt-2 text-sm transition-colors">Entrar no Sistema</button>
                                 </form>
-                                <div className="mt-6 text-center text-xs text-gray-400">Oliveira Vitis • Acesso Restrito</div>
+                                <div className="mt-6 flex items-center justify-between text-xs text-gray-400">
+                                    <span>Oliveira Vitis</span>
+                                    <button onClick={() => setShowConfigModal(true)} className="text-blue-600 hover:underline font-medium">Configurar Nuvem</button>
+                                </div>
                             </div>
                         </div>
                     ) : (
                         <>
                             <Sidebar />
                             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                                <div className="md:hidden bg-[#08194c] text-white p-4 flex items-center justify-between flex-shrink-0">
+                                <div className={`md:hidden p-4 flex items-center justify-between flex-shrink-0 ${isDarkMode ? 'bg-slate-900 border-b border-slate-800 text-white' : 'bg-[#08194c] text-white'}`}>
                                     <button onClick={() => setIsMobileMenuOpen(true)} className="p-1">
                                         <Icon name="menu" className="w-6 h-6" />
                                     </button>
                                     <span className="font-bold">Oliveira Vitis</span>
-                                    <div className="w-6"></div>
+                                    <button onClick={toggleDarkMode} className="p-1">
+                                        <Icon name={isDarkMode ? "sun" : "moon"} className="w-5 h-5 text-yellow-300" />
+                                    </button>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-4 md:p-8">
                                     {activeTab === 'clientes' && <ClientesView />}
