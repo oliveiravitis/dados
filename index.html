@@ -24,6 +24,25 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
         
+        // Funções auxiliares para leitura/escrita segura no LocalStorage
+        const safeGetStorage = (key, fallback) => {
+            try {
+                const item = localStorage.getItem(key);
+                return item ? JSON.parse(item) : fallback;
+            } catch (e) {
+                console.error(`Erro ao carregar ${key} do localStorage:`, e);
+                return fallback;
+            }
+        };
+
+        const safeSetStorage = (key, value) => {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (e) {
+                console.error(`Erro ao salvar ${key} no localStorage:`, e);
+            }
+        };
+
         // Lucide Icon Helpers for React
         const Icon = ({ name, className = "w-5 h-5", ...props }) => {
             useEffect(() => {
@@ -40,70 +59,48 @@
             const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
             // Global State com Persistência em LocalStorage
-            const [clients, setClients] = useState(() => {
-                const saved = localStorage.getItem('ov_clients');
-                if (saved) return JSON.parse(saved);
-                return [
-                    { id: 'c1', name: 'João Silva', company: 'TechCorp', contact: '11999999999', plan: 'Plano Pro', isFreeTrial: false, trialDuration: '' },
-                    { id: 'c2', name: 'Maria Souza', company: 'Design Co.', contact: 'maria@designco.com', plan: 'Plano Básico', isFreeTrial: true, trialDuration: '14 dias' }
-                ];
-            });
+            const [clients, setClients] = useState(() => safeGetStorage('ov_clients', [
+                { id: 'c1', name: 'João Silva', company: 'TechCorp', contact: '11999999999', plan: 'Plano Pro', isFreeTrial: false, trialDuration: '' },
+                { id: 'c2', name: 'Maria Souza', company: 'Design Co.', contact: 'maria@designco.com', plan: 'Plano Básico', isFreeTrial: true, trialDuration: '14 dias' }
+            ]));
 
-            const [projects, setProjects] = useState(() => {
-                const saved = localStorage.getItem('ov_projects');
-                if (saved) return JSON.parse(saved);
-                return [
-                    { id: 'p1', title: 'Redesign do Site', clientId: 'c1' },
-                    { id: 'p2', title: 'Campanha de Marketing', clientId: 'c2' }
-                ];
-            });
+            const [projects, setProjects] = useState(() => safeGetStorage('ov_projects', [
+                { id: 'p1', title: 'Redesign do Site', clientId: 'c1' },
+                { id: 'p2', title: 'Campanha de Marketing', clientId: 'c2' }
+            ]));
 
-            const [timelineItems, setTimelineItems] = useState(() => {
-                const saved = localStorage.getItem('ov_timelineItems');
-                if (saved) return JSON.parse(saved);
-                return [
-                    { id: 'tl1', projectId: 'p1', title: 'Fase de Design', startDate: '2026-11-01', endDate: '2026-11-15', completed: false },
-                    { id: 'tl2', projectId: 'p1', title: 'Desenvolvimento', startDate: '2026-11-16', endDate: '2026-12-10', completed: false }
-                ];
-            });
+            const [timelineItems, setTimelineItems] = useState(() => safeGetStorage('ov_timelineItems', [
+                { id: 'tl1', projectId: 'p1', title: 'Fase de Design', startDate: '2026-11-01', endDate: '2026-11-15', completed: false },
+                { id: 'tl2', projectId: 'p1', title: 'Desenvolvimento', startDate: '2026-11-16', endDate: '2026-12-10', completed: false }
+            ]));
 
-            const [kanbanLists, setKanbanLists] = useState(() => {
-                const saved = localStorage.getItem('ov_kanbanLists');
-                if (saved) return JSON.parse(saved);
-                return [
-                    { id: 'todo', title: 'A Fazer' },
-                    { id: 'in-progress', title: 'Em Andamento' },
-                    { id: 'done', title: 'Concluído' },
-                    { id: 'client-c1', title: 'João Silva' },
-                    { id: 'client-c2', title: 'Maria Souza' }
-                ];
-            });
+            const [kanbanLists, setKanbanLists] = useState(() => safeGetStorage('ov_kanbanLists', [
+                { id: 'todo', title: 'A Fazer' },
+                { id: 'in-progress', title: 'Em Andamento' },
+                { id: 'done', title: 'Concluído' },
+                { id: 'client-c1', title: 'João Silva' },
+                { id: 'client-c2', title: 'Maria Souza' }
+            ]));
 
-            const [tasks, setTasks] = useState(() => {
-                const saved = localStorage.getItem('ov_tasks');
-                if (saved) return JSON.parse(saved);
-                return [
-                    { id: 't1', title: 'Criar wireframes da página inicial', projectId: 'p1', listId: 'todo', description: 'Focar na usabilidade mobile primeiramente.', attachments: [] },
-                    { id: 't2', title: 'Aprovar orçamento com cliente', projectId: 'p2', listId: 'in-progress', description: '', attachments: [] },
-                    { id: 't3', title: 'Reunião de Kickoff', projectId: 'p1', listId: 'done', description: '', attachments: [] }
-                ];
-            });
+            const [tasks, setTasks] = useState(() => safeGetStorage('ov_tasks', [
+                { id: 't1', title: 'Criar wireframes da página inicial', projectId: 'p1', listId: 'todo', description: 'Focar na usabilidade mobile primeiramente.', attachments: [] },
+                { id: 't2', title: 'Aprovar orçamento com cliente', projectId: 'p2', listId: 'in-progress', description: '', attachments: [] },
+                { id: 't3', title: 'Reunião de Kickoff', projectId: 'p1', listId: 'done', description: '', attachments: [] }
+            ]));
 
             // Sincronizar dados automaticamente com o LocalStorage sempre que houver mudanças
-            useEffect(() => { localStorage.setItem('ov_clients', JSON.stringify(clients)); }, [clients]);
-            useEffect(() => { localStorage.setItem('ov_projects', JSON.stringify(projects)); }, [projects]);
-            useEffect(() => { localStorage.setItem('ov_timelineItems', JSON.stringify(timelineItems)); }, [timelineItems]);
-            useEffect(() => { localStorage.setItem('ov_kanbanLists', JSON.stringify(kanbanLists)); }, [kanbanLists]);
-            useEffect(() => { localStorage.setItem('ov_tasks', JSON.stringify(tasks)); }, [tasks]);
+            useEffect(() => { safeSetStorage('ov_clients', clients); }, [clients]);
+            useEffect(() => { safeSetStorage('ov_projects', projects); }, [projects]);
+            useEffect(() => { safeSetStorage('ov_timelineItems', timelineItems); }, [timelineItems]);
+            useEffect(() => { safeSetStorage('ov_kanbanLists', kanbanLists); }, [kanbanLists]);
+            useEffect(() => { safeSetStorage('ov_tasks', tasks); }, [tasks]);
 
             // Modal States
             const [timelineModalProject, setTimelineModalProject] = useState(null);
             const [taskDetailsModal, setTaskDetailsModal] = useState(null);
 
-            // Authentication State
-            const [isAuthenticated, setIsAuthenticated] = useState(() => {
-                return sessionStorage.getItem('ov_auth') === 'true';
-            });
+            // Authentication State (salvo com segurança para não deslogar ao recarregar)
+            const [isAuthenticated, setIsAuthenticated] = useState(() => safeGetStorage('ov_auth', false));
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [loginError, setLoginError] = useState('');
@@ -121,7 +118,7 @@
                     loginPassword === 'Cristhian20053192@'
                 ) {
                     setIsAuthenticated(true);
-                    sessionStorage.setItem('ov_auth', 'true');
+                    safeSetStorage('ov_auth', true);
                     setLoginError('');
                 } else {
                     setLoginError('Acesso negado. Credenciais inválidas.');
@@ -130,9 +127,41 @@
 
             const handleLogout = () => {
                 setIsAuthenticated(false);
-                sessionStorage.removeItem('ov_auth');
+                safeSetStorage('ov_auth', false);
                 setLoginEmail('');
                 setLoginPassword('');
+            };
+
+            // Função para Exportar Backup em arquivo JSON
+            const exportData = () => {
+                const data = { clients, projects, timelineItems, kanbanLists, tasks };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `oliveira-vitis-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+            };
+
+            // Função para Importar Backup de arquivo JSON
+            const importData = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const parsed = JSON.parse(event.target.result);
+                        if (parsed.clients) setClients(parsed.clients);
+                        if (parsed.projects) setProjects(parsed.projects);
+                        if (parsed.timelineItems) setTimelineItems(parsed.timelineItems);
+                        if (parsed.kanbanLists) setKanbanLists(parsed.kanbanLists);
+                        if (parsed.tasks) setTasks(parsed.tasks);
+                        alert('Backup importado com sucesso!');
+                    } catch (err) {
+                        alert('Erro ao carregar o arquivo de backup. Certifique-se de que é um JSON válido.');
+                    }
+                };
+                reader.readAsText(file);
             };
 
             const generateId = (prefix) => `${prefix}${Math.random().toString(36).substr(2, 9)}`;
@@ -179,10 +208,22 @@
                                 );
                             })}
                         </nav>
-                        <div className="p-4 border-t border-blue-950/50">
+                        <div className="p-4 border-t border-blue-950/50 space-y-2">
+                            <button
+                                onClick={exportData}
+                                className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl bg-blue-900/50 hover:bg-blue-800 text-blue-100 transition-colors text-xs font-medium"
+                            >
+                                <Icon name="download" className="w-4 h-4" />
+                                <span>Exportar Backup (JSON)</span>
+                            </button>
+                            <label className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl bg-blue-900/30 hover:bg-blue-800 text-blue-200 cursor-pointer transition-colors text-xs font-medium">
+                                <Icon name="upload" className="w-4 h-4" />
+                                <span>Importar Backup</span>
+                                <input type="file" accept=".json" onChange={importData} className="hidden" />
+                            </label>
                             <button
                                 onClick={handleLogout}
-                                className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white transition-colors text-sm font-medium"
+                                className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white transition-colors text-sm font-medium mt-2"
                             >
                                 <span>Encerrar Sessão</span>
                             </button>
@@ -893,4 +934,3 @@
     </script>
 </body>
 </html>
-```
