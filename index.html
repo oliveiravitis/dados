@@ -180,27 +180,52 @@
             const handleSaveFirebaseConfig = (e) => {
                 e.preventDefault();
                 try {
-                    let rawInput = firebaseJsonInput.trim();
-                    // Se o usuário colou a declaração const firebaseConfig = { ... } ou apenas o objeto
-                    if (rawInput.includes('const firebaseConfig') || rawInput.includes('firebaseConfig')) {
-                        rawInput = rawInput.replace(/const\s+firebaseConfig\s*=\s*/, '').replace(/;\s*$/, '');
-                    }
-                    // Converte chaves sem aspas para formato JSON válido (ex: apiKey: "..." -> "apiKey": "...")
-                    let formattedJson = rawInput
-                        .replace(/([\w\d_]+)\s*:/g, '"$1":')
-                        .replace(/'/g, '"');
+                    const rawInput = firebaseJsonInput.trim();
                     
-                    let cfg = JSON.parse(formattedJson);
-                    localStorage.setItem('ov_firebase_cfg', JSON.stringify(cfg));
-                    if (window.initFirebaseWithConfig(cfg)) {
-                        alert('Firebase configurado e conectado com sucesso!');
-                        setShowConfigModal(false);
-                        window.location.reload();
+                    // Função inteligente de extração por expressão regular (funciona até se colar a tag <script> inteira)
+                    const extractKey = (key) => {
+                        const match = rawInput.match(new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`));
+                        return match ? match[1] : null;
+                    };
+
+                    const apiKey = extractKey('apiKey');
+                    const projectId = extractKey('projectId');
+                    
+                    let cfg = null;
+                    if (apiKey && projectId) {
+                        cfg = {
+                            apiKey,
+                            projectId,
+                            authDomain: extractKey('authDomain') || undefined,
+                            storageBucket: extractKey('storageBucket') || undefined,
+                            messagingSenderId: extractKey('messagingSenderId') || undefined,
+                            appId: extractKey('appId') || undefined,
+                            measurementId: extractKey('measurementId') || undefined
+                        };
                     } else {
-                        alert('Erro ao inicializar Firebase com este objeto.');
+                        // Método alternativo: extrai entre o primeiro '{' e o último '}'
+                        const firstBrace = rawInput.indexOf('{');
+                        const lastBrace = rawInput.lastIndexOf('}');
+                        if (firstBrace !== -1 && lastBrace > firstBrace) {
+                            const objStr = rawInput.substring(firstBrace, lastBrace + 1);
+                            cfg = (new Function(`return (${objStr})`))();
+                        }
+                    }
+
+                    if (cfg && cfg.apiKey && cfg.projectId) {
+                        localStorage.setItem('ov_firebase_cfg', JSON.stringify(cfg));
+                        if (window.initFirebaseWithConfig(cfg)) {
+                            alert('Firebase configurado e conectado com sucesso!');
+                            setShowConfigModal(false);
+                            window.location.reload();
+                        } else {
+                            alert('Erro ao inicializar Firebase com estas chaves.');
+                        }
+                    } else {
+                        throw new Error('Configuração incompleta');
                     }
                 } catch (err) {
-                    alert('Formato inválido. Certifique-se de colar exatamente o bloco firebaseConfig do painel do Firebase.');
+                    alert('Não foi possível identificar as chaves do Firebase. Você pode colar todo o bloco de código que o Firebase forneceu.');
                 }
             };
 
