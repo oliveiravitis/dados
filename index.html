@@ -614,6 +614,8 @@
             const TimelineModal = () => {
                 if (!timelineModalProject) return null;
                 const [newItem, setNewItem] = useState({ title: '', startDate: '', endDate: '' });
+                const [selectedMonthFilter, setSelectedMonthFilter] = useState('all');
+                const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
                 const projectItems = timelineItems.filter(item => item.projectId === timelineModalProject.id);
 
@@ -661,14 +663,17 @@
                     return { text: `Atrasado ${Math.abs(diffDays)} dias`, color: 'text-red-600 bg-red-50' };
                 };
 
-                const getMonthsList = () => [
-                    { name: 'Janeiro', days: 31 }, { name: 'Fevereiro', days: 28 }, { name: 'Março', days: 31 },
-                    { name: 'Abril', days: 30 }, { name: 'Maio', days: 31 }, { name: 'Junho', days: 30 },
-                    { name: 'Julho', days: 31 }, { name: 'Agosto', days: 31 }, { name: 'Setembro', days: 30 },
-                    { name: 'Outubro', days: 31 }, { name: 'Novembro', days: 30 }, { name: 'Dezembro', days: 31 },
+                const allMonths = [
+                    { name: 'Janeiro', index: 0 }, { name: 'Fevereiro', index: 1 }, { name: 'Março', index: 2 },
+                    { name: 'Abril', index: 3 }, { name: 'Maio', index: 4 }, { name: 'Junho', index: 5 },
+                    { name: 'Julho', index: 6 }, { name: 'Agosto', index: 7 }, { name: 'Setembro', index: 8 },
+                    { name: 'Outubro', index: 9 }, { name: 'Novembro', index: 10 }, { name: 'Dezembro', index: 11 },
                 ];
                 
-                const months = getMonthsList();
+                const months = selectedMonthFilter === 'all' 
+                    ? allMonths 
+                    : allMonths.filter(m => m.index.toString() === selectedMonthFilter);
+
                 const todayDate = new Date();
                 const currentMonthIndex = todayDate.getMonth();
                 const currentDayNumber = todayDate.getDate();
@@ -688,8 +693,17 @@
                             </button>
                         </div>
 
-                        <div className={`flex-1 flex flex-col md:flex-row overflow-hidden ${isDarkMode ? 'bg-slate-950' : 'bg-gray-100'}`}>
-                            <div className={`w-full md:w-96 border-r p-6 flex flex-col shadow-sm overflow-y-auto ${isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-200'}`}>
+                        <div className={`flex-1 flex flex-col md:flex-row overflow-hidden relative ${isDarkMode ? 'bg-slate-950' : 'bg-gray-100'}`}>
+                            {/* Botão flutuante no celular para colapsar/expandir o painel de etapas */}
+                            <button 
+                                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                                className="md:hidden absolute top-2 right-2 z-30 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow flex items-center space-x-1"
+                            >
+                                <Icon name={isSidebarCollapsed ? "chevron-down" : "chevron-up"} className="w-4 h-4" />
+                                <span>{isSidebarCollapsed ? 'Mostrar Etapas' : 'Ocultar Etapas'}</span>
+                            </button>
+
+                            <div className={`w-full md:w-80 border-r p-6 flex flex-col shadow-sm overflow-y-auto transition-all duration-300 ${isSidebarCollapsed ? 'hidden md:flex' : 'flex'} ${isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-200'}`}>
                                 <h3 className="font-bold mb-4 flex items-center">
                                     <Icon name="list-plus" className="w-5 h-5 mr-2 text-blue-500" /> Etapas do Projeto
                                 </h3>
@@ -745,29 +759,46 @@
                                 </div>
                             </div>
 
-                            <div className={`flex-1 p-6 overflow-x-auto flex flex-col ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-gray-800'}`}>
-                                <div className="flex items-center justify-between mb-4">
+                            <div className={`flex-1 p-4 md:p-6 overflow-x-auto flex flex-col ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-gray-800'}`}>
+                                <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-3">
                                     <h3 className="font-bold flex items-center">
-                                        <Icon name="calendar" className="w-5 h-5 mr-2 text-blue-500" /> Gráfico de Gantt (Timeline)
+                                        <Icon name="calendar" className="w-5 h-5 mr-2 text-blue-500" /> Gráfico de Gantt
                                     </h3>
-                                    <div className="flex items-center space-x-3 text-xs text-slate-400">
-                                        <span className="flex items-center"><span className="w-3 h-3 bg-orange-500 inline-block rounded-full mr-1.5"></span> Linha de Hoje</span>
-                                        <span className="flex items-center"><span className="w-3 h-3 bg-blue-500 inline-block rounded-md mr-1.5"></span> Período</span>
+                                    <div className="flex items-center space-x-3">
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-xs text-slate-400 font-medium">Exibir:</span>
+                                            <select 
+                                                value={selectedMonthFilter} 
+                                                onChange={(e) => setSelectedMonthFilter(e.target.value)}
+                                                className={`text-xs p-1.5 rounded-lg border outline-none font-semibold ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700'}`}
+                                            >
+                                                <option value="all">Todos os Meses</option>
+                                                {allMonths.map(m => (
+                                                    <option key={m.index} value={m.index.toString()}>{m.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="hidden md:flex items-center space-x-3 text-xs text-slate-400">
+                                            <span className="flex items-center"><span className="w-3 h-3 bg-orange-500 inline-block rounded-full mr-1.5"></span> Hoje</span>
+                                            <span className="flex items-center"><span className="w-3 h-3 bg-blue-500 inline-block rounded-md mr-1.5"></span> Período</span>
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div className={`flex-1 rounded-2xl border p-4 overflow-x-auto relative min-w-[700px] ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-gray-50 border-gray-200'}`}>
-                                    <div className={`grid grid-cols-12 gap-2 border-b pb-3 mb-4 sticky top-0 z-10 ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-gray-200 bg-gray-50'}`}>
-                                        {months.map((m, idx) => (
-                                            <div key={m.name} className={`text-center font-bold text-xs uppercase tracking-wider py-1 rounded ${idx === currentMonthIndex ? 'bg-blue-600 text-white shadow' : (isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-gray-600 bg-gray-200/60')}`}>
+                                    <div className={`grid gap-2 border-b pb-3 mb-4 sticky top-0 z-10 ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-gray-200 bg-gray-50'}`} style={{ gridTemplateColumns: `repeat(${months.length}, minmax(0, 1fr))` }}>
+                                        {months.map((m) => (
+                                            <div key={m.name} className={`text-center font-bold text-xs uppercase tracking-wider py-1 rounded ${m.index === currentMonthIndex ? 'bg-blue-600 text-white shadow' : (isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-gray-600 bg-gray-200/60')}`}>
                                                 {m.name}
                                             </div>
                                         ))}
                                     </div>
 
-                                    <div className="absolute top-16 bottom-4 w-0.5 bg-orange-500 z-20 pointer-events-none" style={{ left: `${((currentMonthIndex * 30 + currentDayNumber) / 365) * 100}%` }}>
-                                        <span className="absolute -top-3 -translate-x-1/2 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">Hoje ({currentDayNumber})</span>
-                                    </div>
+                                    {selectedMonthFilter === 'all' && (
+                                        <div className="absolute top-16 bottom-4 w-0.5 bg-orange-500 z-20 pointer-events-none" style={{ left: `${((currentMonthIndex * 30 + currentDayNumber) / 365) * 100}%` }}>
+                                            <span className="absolute -top-3 -translate-x-1/2 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">Hoje</span>
+                                        </div>
+                                    )}
 
                                     <div className="space-y-4 pt-2 relative">
                                         {projectItems.length === 0 ? (
