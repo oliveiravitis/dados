@@ -180,8 +180,17 @@
             const handleSaveFirebaseConfig = (e) => {
                 e.preventDefault();
                 try {
-                    // Tenta extrair ou converter o JSON inserido
-                    let cfg = JSON.parse(firebaseJsonInput);
+                    let rawInput = firebaseJsonInput.trim();
+                    // Se o usuário colou a declaração const firebaseConfig = { ... } ou apenas o objeto
+                    if (rawInput.includes('const firebaseConfig') || rawInput.includes('firebaseConfig')) {
+                        rawInput = rawInput.replace(/const\s+firebaseConfig\s*=\s*/, '').replace(/;\s*$/, '');
+                    }
+                    // Converte chaves sem aspas para formato JSON válido (ex: apiKey: "..." -> "apiKey": "...")
+                    let formattedJson = rawInput
+                        .replace(/([\w\d_]+)\s*:/g, '"$1":')
+                        .replace(/'/g, '"');
+                    
+                    let cfg = JSON.parse(formattedJson);
                     localStorage.setItem('ov_firebase_cfg', JSON.stringify(cfg));
                     if (window.initFirebaseWithConfig(cfg)) {
                         alert('Firebase configurado e conectado com sucesso!');
@@ -191,7 +200,7 @@
                         alert('Erro ao inicializar Firebase com este objeto.');
                     }
                 } catch (err) {
-                    alert('JSON inválido. Certifique-se de colar o objeto firebaseConfig corretamente.');
+                    alert('Formato inválido. Certifique-se de colar exatamente o bloco firebaseConfig do painel do Firebase.');
                 }
             };
 
